@@ -55,7 +55,7 @@ proba_out02  = zeros(N_out,pre_trial_dur);
 spikes_out01 = zeros(N_out,pre_trial_dur);
 spikes_out02 = zeros(N_out,pre_trial_dur);
 
-proba_out_av0  = zeros(N_out,pre_trial_dur);
+proba_out_av0__pretrial  = zeros(N_out,pre_trial_dur);
 proba_out_av1  = zeros(N_out,trial_dur);
 
 spikes_out_trial01 = zeros(N_out,nu_trial*2);
@@ -72,15 +72,17 @@ w_oi = zeros(N_out,N_in);
 w_oi2 = zeros(N_out,N_in);
 w_oo = zeros(N_out,N_out);
 
+% << Network connections >>
 for j=1:N_out
-    w_oi(j,:) = g_w_oi/N_in *(exp(K_oin*(cos((pos_in-pos_out(j))/180 *2*pi)-1)));
-    w_oi2(j,:) = g_w_oi2/N_in *(exp(K_oin2*(cos((pos_in-pos_out(j))/180 *2*pi)-1)));
-    w_oo(j,:) = g_w_oo/N_out*...
+    w_oi(j,:) = g_w_oi/N_in *(exp(K_oin*(cos((pos_in-pos_out(j))/180 *2*pi)-1)));  % << MT input >>
+    w_oi2(j,:) = g_w_oi2/N_in *(exp(K_oin2*(cos((pos_in-pos_out(j))/180 *2*pi)-1)));  % << Target input >>
+    w_oo(j,:) = g_w_oo/N_out*...   % << LIP recurrent >>
                 ((exp(K_oo*(cos((pos_out-pos_out(j))/180*2*pi)-1)))-...
                 amp_i*(exp(K_oI*(cos((pos_out-pos_out(j))/180*2*pi)-1))))...
                 + dc_w_oo;
 end
 
+% << MT correlation matrix >>
 for j=1:N_in
     cov_mt(j,:) = var_mt*exp(K_cov_mt*(cos((pos_in-pos_in(j))/180 *2*pi)-1));
 end

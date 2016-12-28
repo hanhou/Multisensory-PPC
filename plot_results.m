@@ -13,7 +13,8 @@ if nu_targets==2
 %       loglik_shuff= log10(lik1_shuff./lik2_shuff);
 %    end
    
-size   plot(wind_times, loglik,'*-');
+% size   plot(wind_times, loglik,'*-');
+    plot(wind_times, loglik,'*-');
 %    if shuffle_flag==1
 %        hold on
 %        plot([1 100 200 300 trial_dur], loglik_shuff,'r*-');
@@ -99,7 +100,7 @@ hold off
 subplot(224)
 %surf([0:180/(N_out-1):180], [0:180/(N_out-1):180],cov_out-diag(diag(cov_out)))
 %shading interp
-aux_proba= [proba_out_av0(:,pre_trial_dur-49:10:pre_trial_dur) proba_out_av1(:,1:10:trial_dur)];
+aux_proba= [proba_out_av0__pretrial(:,pre_trial_dur-49:10:pre_trial_dur) proba_out_av1(:,1:10:trial_dur)];
 %surfl(aux_proba)
 
 plot([-49:10:trial_dur],aux_proba(50,:))
