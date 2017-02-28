@@ -14,6 +14,7 @@ rand('state',sum(100*clock))
 
 N_in = 100;
 pos_in=[0:180/N_in:179.9999];
+
 N_out = 100;
 step_out = 180/N_out;
 pos_out=[0:step_out:179.9999];
@@ -171,7 +172,7 @@ att_gain2 = 0;
 
 
 %g_w_oo = 20;%%% parameter for Cosyne
-g_w_oo = 21;
+g_w_oo = 21;6
 amp_i = 0.0;
 dc_w_oo = -0.17;
 
@@ -196,17 +197,14 @@ initialization
 
 
 
-
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Main loop
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 count =1;
 %% there are two main loops, for two different positions of the input
-for l=1:2
-    pos = peak+step_test*(l-step_test/2);
-    fprintf('%d  pos: %4.2f\n  ',l, pos);
+for mm = 1:2  % Motion directions 
+    pos = peak+step_test*(mm-step_test/2);
+    fprintf('%d  pos: %4.2f\n  ',mm, pos);
     
     %    %%% proba_in: proba of firing of input neurons in response to motion
     max_rate_in = r_spont_MT + b_pref*coherence;
@@ -227,15 +225,13 @@ for l=1:2
     %    b_in = r_spont_MT + b_null*coherence;
     %    proba_in_temp = ((max_rate_in-b_in)*exp(K_in*(cos((pos_in'-pos)/180*2*pi)-1))+b_in)*delta_t;
     
-    %%% proba_in2: proba of firing of input neurons in response to visual
+    %%% proba_in2: proba of firing of input neurons  in response to visual
     %%% targets
     
     % << Initialize firing rate of LIP neurons during "pretrial" by driving LIP with proba_in2. >>
     pos_targ = pos+[0:180/nu_targets:179];
     proba_in2__target = zeros(N_out,1);
     for m=1:nu_targets
-        aux(:,m)= ((max_rate_in2-b_in2)*...
-            exp(K_in2*(cos((pos_in'-pos_targ(m))/180*2*pi)-1))+b_in2)*delta_t;
         proba_in2__target = proba_in2__target + ((max_rate_in2-b_in2)*...
             exp(K_in2*(cos((pos_in'-pos_targ(m))/180*2*pi)-1))+b_in2)*delta_t;
     end
@@ -929,7 +925,7 @@ plot([-49:10:trial_dur],aux_proba(50,:)-(aux_proba(100,:).*(aux_proba(100,:)>0))
 hold off
 axis([-49 trial_dur 0 60] )
 title('Conditioned on neuron')
-
+ 
 
 %%% compute and plot Tin and Tout trajectories conditioned on response
 proba_out50_cor = proba_out50.*(perf_trial'*ones(1,trial_dur));
