@@ -18,13 +18,13 @@ rand('state',sum(100*clock))
 % === Sizes ===
 % Input layers
 N_vis = 100; % Visual motion signal
-prefs_vis = 0:180/N_vis:179.9999;
+prefs_vis = 0:360/N_vis:359.9999;
 
 N_targets = 2; % Target input
 
 % Output layers
 N_lip = 100;
-prefs_lip = 0:180/N_lip:179.9999;
+prefs_lip = 0:360/N_lip:359.9999;
 
 % === Time ===
 dt = 1e-3; % Size of time bin in seconds
@@ -40,12 +40,12 @@ decis_flag = 1; %% decis_flag=1 means that the trial stops at the bound (reactio
 decis_thres = 58; %% bound height
 
 % === Stimuli ===
-stim_positions = [90 92];
+stim_positions = [90];
 coherence = 6.4;
 
 % Parameters for MT from Mazurek and Shadlen, except width.
 % K_cov_mt and var_mt controls the correlations.
-%  << cov_mt(j,:) = var_vis*exp(K_cov_vis*(cos((prefs_vis-prefs_vis(j))/180 *2*pi)-1));
+%  << cov_mt(j,:) = var_vis*exp(K_cov_vis*(cos((prefs_vis-prefs_vis(j))/360 *2*pi)-1));
 %     w_mt = real(sqrtm(cov_mt));
 %     aux_proba_in = proba_in + w_mt*randn(N_vis,1); >>
 r_spont_vis = 20;
@@ -177,18 +177,18 @@ w_lip_targ = zeros(N_lip,N_lip); % Not N_target, but N_lip (supposing the same n
 w_lip_lip = zeros(N_lip,N_lip);
 
 for nn=1:N_lip
-    w_lip_vis(nn,:) = g_w_lip_vis/N_vis *(exp(K_lip_vis*(cos((prefs_vis-prefs_lip(nn))/180 *2*pi)-1)));  % << MT input >>
-    w_lip_targ(nn,:) = g_w_lip_targ/N_vis *(exp(K_lip_targ*(cos((prefs_vis-prefs_lip(nn))/180 *2*pi)-1)));  % << Target input >>
+    w_lip_vis(nn,:) = g_w_lip_vis/N_vis *(exp(K_lip_vis*(cos((prefs_vis-prefs_lip(nn))/360 *2*pi)-1)));  % << MT input >>
+    w_lip_targ(nn,:) = g_w_lip_targ/N_vis *(exp(K_lip_targ*(cos((prefs_vis-prefs_lip(nn))/360 *2*pi)-1)));  % << Target input >>
     w_lip_lip(nn,:) = g_w_lip_lip/N_lip*...   % << LIP recurrent >>
-        ((exp(K_lip_lip*(cos((prefs_lip-prefs_lip(nn))/180*2*pi)-1)))-...
-        amp_I*(exp(K_lip_I*(cos((prefs_lip-prefs_lip(nn))/180*2*pi)-1))))...
+        ((exp(K_lip_lip*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
+        amp_I*(exp(K_lip_I*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1))))...
         + dc_w_lip_lip;
 end
 
 % << MT correlation matrix >>
 cov_vis = zeros(N_vis,N_vis);
 for nn=1:N_vis
-    cov_vis(nn,:) = var_vis*exp(K_cov_vis*(cos((prefs_vis-prefs_vis(nn))/180 *2*pi)-1));
+    cov_vis(nn,:) = var_vis*exp(K_cov_vis*(cos((prefs_vis-prefs_vis(nn))/360 *2*pi)-1));
 end
 w_cov_vis = real(sqrtm(cov_vis));
 
@@ -207,14 +207,14 @@ for ss = 1:length(stim_positions)  % Motion directions
     % proba_vis: proba of firing of visual neurons in response to motion
     max_rate_vis = r_spont_vis + b_pref_vis * coherence;
     b_vis = r_spont_vis + b_null_vis * coherence;
-    proba_vis_tuning = ((max_rate_vis-b_vis)*exp(K_vis*(cos((prefs_vis'-stim_this)/180*2*pi)-1))+b_vis)*dt;
+    proba_vis_tuning = ((max_rate_vis-b_vis)*exp(K_vis*(cos((prefs_vis'-stim_this)/360*2*pi)-1))+b_vis)*dt;
     
     % proba_targ: proba of firing of target neurons in response to visual targets
-    pos_targ = stim_this + [0:180/N_targets:179];
+    pos_targ = stim_this + [0:360/N_targets:359.9];
     proba_target_tuning = zeros(N_lip,1);
     for nn=1:N_targets
         proba_target_tuning = proba_target_tuning + ((max_rate_target-b_target)*...
-            exp(K_target*(cos((prefs_vis'-pos_targ(nn))/180*2*pi)-1))+b_target)*dt;
+            exp(K_target*(cos((prefs_vis'-pos_targ(nn))/360*2*pi)-1))+b_target)*dt;
     end
     proba_target_tuning = proba_target_tuning/(slope_norm_target*(N_targets/2)+dc_norm_target);   % << Divisive normalization >>
     
@@ -345,21 +345,44 @@ end % of stimulus position
 
 
 %% == Plotting example network activities ==
-%{
+%%{
 figure(1001); clf
-rate_lip_aver = nanmean(rate_lip{1}(:,:,:,1),3);
+
+rate_real_vis_aver = nanmean(spikes_vis{1}(:,:,:,1),3)/dt;
+
+rate_expected_lip_aver = nanmean(rate_lip{1}(:,:,:,1),3);
+rate_real_lip_aver = nanmean(spikes_lip{1}(:,:,:,1),3)/dt;
+
 for ttt = 1:trial_dur_total
-    plot(nanmean(rate_lip{1}(:,ttt,:,1),3)); ylim([-10 100]);
+    % LIP layer
+    subplot(2,1,1);
+    plot(prefs_lip,rate_expected_lip_aver(:,ttt),'r');  hold on;
+    plot(prefs_lip,rate_real_lip_aver(:,ttt),'k');  hold off;
+    set(gca,'xtick',0:90:360);
+    xlim([0 360]); ylim([-10 100]);
     title(ttt);
+    
+    % Visual layer
+    subplot(2,1,2);
+    plot(prefs_lip,rate_real_vis_aver(:,ttt),'k');  hold off;
+    set(gca,'xtick',0:90:360);
+    xlim([0 360]); ylim([-10 100]);
+    
     drawnow;
 end
+
+
 %}
 
 %%{
 figure(1002); clf;
+to_plot_stim = 1;
+[~,pref_ind] = min(abs(prefs_lip - stim_positions(to_plot_stim)));
+[~,null_ind] = min(abs(prefs_lip - (stim_positions(to_plot_stim)+180)));
+
 for cc = 1:10:N_trial
-    plot(rate_lip{1}(N_lip/2,:,cc,1),'r');
-    hold on; plot(rate_lip{1}(1,:,cc,1),'b--');
+    plot(rate_lip{1}(pref_ind,:,cc,to_plot_stim),'r');
+    hold on; plot(rate_lip{1}(null_ind,:,cc,to_plot_stim),'b--');
 end
 plot(xlim,[decis_thres decis_thres],'k--');
 %}
