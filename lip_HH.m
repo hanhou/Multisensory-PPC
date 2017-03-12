@@ -1,6 +1,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LNP simulations for decision making
-% Modified by HH 2017
+% Modified by HH 2017 @ UNIGE
+% Adapted for the vestibular-visual multisensory heading discrimintation task
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 tic
 clear
@@ -15,45 +16,61 @@ rand('state',sum(100*clock))
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Parameters
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% === Switches ===
+if_debug = 1;
+if_test_set = 0;
+
+if_bounded = 0; %% decis_flag=1 means that the trial stops at the bound (reaction time version)
+decis_thres = 58; %% bound height
+
 % === Sizes ===
 % Input layers
-N_vis = 200; % Visual motion signal
-prefs_vis = 0:360/N_vis:359.9999;
+N_vis = 100; % Visual motion signal
+prefs_vis = linspace(-180,180,N_vis);
 
 N_targets = 2; % Target input
 
 % Output layers
 N_lip = 100;
-prefs_lip = 0:360/N_lip:359.9999;
+prefs_lip = linspace(-180,180,N_lip);
 
 % === Time ===
 dt = 1e-3; % Size of time bin in seconds
-trial_dur_total = 300; %% in time bins (including pre_trial_dur)
-stim_on_time = 50; % Time of motion start, in time bins.
-N_trial = 100; % For each condition
+trial_dur_total = 1700; %% in time bins (including pre_trial_dur)
+stim_on_time = 200; % Time of motion start, in time bins.
+N_trial = 10; % For each condition
+
+ts = (0:trial_dur_total-1)*dt*1000; % in ms
 
 if stim_on_time>trial_dur_total
     error('pre_trial_dur cannot be longer than trial_dur');
 end
 
-decis_flag = 1; %% decis_flag=1 means that the trial stops at the bound (reaction time version)
-decis_thres = 58; %% bound height
-
 % === Stimuli ===
-stim_positions = [90];
-coherence = 30;
+headings = [8];
+coherence = 12;
+
+% Parameters roughly follow the Yong Gu's MST data. 
+r_spont_vis = 10;
+b_pref_vis = 1.7;
+b_null_vis = -0.2;
+K_vis = 1.5;
+K_cov_vis = 2;
+var_vis = 1e-5;
 
 % Parameters for MT from Mazurek and Shadlen, except width.
 % K_cov_mt and var_mt controls the correlations.
 %  << cov_mt(j,:) = var_vis*exp(K_cov_vis*(cos((prefs_vis-prefs_vis(j))/360 *2*pi)-1));
 %     w_mt = real(sqrtm(cov_mt));
 %     aux_proba_in = proba_in + w_mt*randn(N_vis,1); >>
-r_spont_vis = 20;
-b_pref_vis = 0.4;
-b_null_vis = -0.2;
-K_vis = 4;
-K_cov_vis = 2;
-var_vis = 1e-5;
+% r_spont_vis = 20;
+% b_pref_vis = 0.4;
+% b_null_vis = -0.2;
+% K_vis = 4;
+% K_cov_vis = 2;
+% var_vis = 1e-5;
+
 
 % Parameter of the activity evoked by the visual targets
 max_rate_target = 42; %% in Hz
@@ -61,6 +78,24 @@ b_target = 0;
 K_target = 4;
 slope_norm_target=0.5;
 dc_norm_target = 0.5;
+
+% == Temporal dynamics ==
+t_motion = 0:trial_dur_total-stim_on_time-1; % in s
+duration = 1500; num_of_sigma = 3.5; amp = 0.2;
+miu = 750; sigma = duration/2/num_of_sigma; 
+vel = exp(-(t_motion-miu).^2/(2*sigma^2));
+vel = vel*amp/sum(vel*dt) ; % in m/s. Normalized to distance
+acc = diff(vel)/dt; % in m/s^2
+
+% Gains
+gain_vel_vis = 5; % (m/s)^-1
+gain_acc_vest = 10; % (m^2/s)^-1
+
+% if if_debug
+%     figure(111);clf
+%     set(gcf,'name','Motion profile','uni','norm','pos',[0.632       0.381       0.358       0.403]);
+%     plotyy(t_motion,vel,t_motion(1:end-1),acc);
+% end
 
 
 % === Network configuration ===
@@ -70,8 +105,11 @@ time_const_lip = 1000e-3; % in s
 time_const_vis  = time_const_lip;
 
 % -- Visual to LIP
-g_w_lip_vis =65;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+g_w_lip_vis = 30;
 K_lip_vis = 5;
+dc_w_lip_vis = -5/100;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % --- Targets to LIP
 g_w_lip_targ= 40;
@@ -79,12 +117,14 @@ K_lip_targ= 5;
 att_gain2_targ = 0; % Drop in attention to visual target once motion stimulus appears.
 
 % --- Recurrent connectivity in LIP
-g_w_lip_lip = 21;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+g_w_lip_lip = 25;
 K_lip_lip = 10;
-dc_w_lip_lip = -0.17;
+dc_w_lip_lip = -10/100;
 
-amp_I = 0.0;  % << What's this? HH >>
+amp_I = 0;  % Mexico hat shape
 K_lip_I = 2;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Input-output function of LIP
 bias_lip = 0;
@@ -121,24 +161,23 @@ spikes_in_trial12 = zeros(N_vis,N_trial*2);
 
 decision_ac = zeros(N_lip,trial_dur_total+2);
 
-
 spikes_target = cell(2,1); spikes_vis = cell(2,1); rate_lip = cell(2,1); spikes_lip = cell(2,1);
 spikes_count_vis = cell(2,1); proba_count_lip = cell(2,1); spikes_count_lip = cell(2,1);
 
-for m = 1:2 % Train and Test
+for m = 1:if_test_set+1 % Train and Test
     
     % Raw data
-    spikes_target{m} = nan(N_lip,trial_dur_total,N_trial,length(stim_positions));
-    spikes_vis{m} = nan(N_vis,trial_dur_total,N_trial,length(stim_positions));
-    rate_lip{m} = nan(N_lip,trial_dur_total,N_trial,length(stim_positions));
-    spikes_lip{m} = nan(N_lip,trial_dur_total,N_trial,length(stim_positions));
+    spikes_target{m} = nan(N_lip,trial_dur_total,N_trial,length(headings));
+    spikes_vis{m} = nan(N_vis,trial_dur_total,N_trial,length(headings));
+    rate_lip{m} = nan(N_lip,trial_dur_total,N_trial,length(headings));
+    spikes_lip{m} = nan(N_lip,trial_dur_total,N_trial,length(headings));
     
     % Spike count in sliding windows for Fisher information
-    spikes_count_vis{m} = zeros(N_vis, fisher_N_window, N_trial,length(stim_positions));
-    proba_count_lip{m} = zeros(N_lip, fisher_N_window, N_trial, length(stim_positions));
-    spikes_count_lip{m} = zeros(N_lip, fisher_N_window, N_trial, length(stim_positions));
+    spikes_count_vis{m} = nan(N_vis, fisher_N_window, N_trial,length(headings));
+    proba_count_lip{m} = nan(N_lip, fisher_N_window, N_trial, length(headings));
+    spikes_count_lip{m} = nan(N_lip, fisher_N_window, N_trial, length(headings));
     if shuffle_flag==1
-        spikes_count_lip_shuff{m} = zeros(N_lip, fisher_N_window, N_trial, length(stim_positions));
+        spikes_count_lip_shuff{m} = zeros(N_lip, fisher_N_window, N_trial, length(headings));
     end
     
 end
@@ -162,7 +201,7 @@ proba_out1_pre=zeros(N_trial*2,stim_on_time);
 proba_out50=zeros(N_trial*2,trial_dur_total);
 proba_out1=zeros(N_trial*2,trial_dur_total);
 
-RT = zeros(N_trial,length(stim_positions));
+RT = zeros(N_trial,length(headings));
 
 spikes_out50 = zeros(N_trial*2,trial_dur_total);
 spikes_out75 = zeros(N_trial*2,trial_dur_total);
@@ -177,12 +216,36 @@ w_lip_targ = zeros(N_lip,N_lip); % Not N_target, but N_lip (supposing the same n
 w_lip_lip = zeros(N_lip,N_lip);
 
 for nn=1:N_lip
-    w_lip_vis(nn,:) = g_w_lip_vis/N_vis *(exp(K_lip_vis*(cos((prefs_vis-prefs_lip(nn))/360 *2*pi)-1)));  % << MT input >>
-    w_lip_targ(nn,:) = g_w_lip_targ/N_vis *(exp(K_lip_targ*(cos((prefs_lip-prefs_lip(nn))/360 *2*pi)-1)));  % << Target input >>
+    % -- Original coarse task --- 
+    %     w_lip_vis(nn,:) = g_w_lip_vis/N_vis *(exp(K_lip_vis*(cos((prefs_vis-prefs_lip(nn))/360 *2*pi)-1)));  % << MT input >>
+    
+    % -- Fine discrimination task --
+    w_lip_vis(nn,:) = g_w_lip_vis/N_vis *(exp(K_lip_vis * (cos((prefs_lip(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+        .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_lip - +/-90) * Sin(heading)
+        + dc_w_lip_vis;   % Offset
+
+    % -- These are the same --
+    w_lip_targ(nn,:) = g_w_lip_targ/N_lip *(exp(K_lip_targ*(cos((prefs_lip-prefs_lip(nn))/360 *2*pi)-1)));  % << Target input >>
     w_lip_lip(nn,:) = g_w_lip_lip/N_lip*...   % << LIP recurrent >>
         ((exp(K_lip_lip*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
         amp_I*(exp(K_lip_I*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1))))...
         + dc_w_lip_lip;
+end
+
+if if_debug
+    figure(90); clf;
+    set(gcf,'units','norm','position',[0.006 0.563 0.539 0.276],'name','Weights');
+    subplot(1,2,1);
+    imagesc(prefs_lip,prefs_vis,w_lip_vis'); colorbar; axis  xy; title('Vis->LIP');
+    xlabel('\theta_{lip}'); ylabel('\theta_{vis}'); ylim([-20 20]);
+    set(gca,'xtick',-180:90:180);
+    
+    subplot(1,2,2);
+    % surf(prefs_lip,prefs_lip,w_lip_lip'); 
+    imagesc(prefs_lip,prefs_lip,w_lip_lip'); 
+    colorbar; axis  xy; title('LIP->LIP');
+    xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
+    set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
 end
 
 % << MT correlation matrix >>
@@ -198,19 +261,28 @@ w_cov_vis = real(sqrtm(cov_vis));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 count = 1;
 
-for ss = 1:length(stim_positions)  % Motion directions
+for ss = 1:length(headings)  % Motion directions
     
     % ==== Not trial- or time- dependent stuffs ===
-    stim_this = stim_positions(ss);
+    stim_this = headings(ss);
     fprintf('%dth  pos: %4.2f\n  ',ss, stim_this);
     
     % proba_vis: proba of firing of visual neurons in response to motion
     max_rate_vis = r_spont_vis + b_pref_vis * coherence;
     b_vis = r_spont_vis + b_null_vis * coherence;
-    proba_vis_tuning = ((max_rate_vis-b_vis)*exp(K_vis*(cos((prefs_vis'-stim_this)/360*2*pi)-1))+b_vis)*dt;
+    proba_vis = ((max_rate_vis-b_vis)*exp(K_vis*(cos((prefs_vis'-stim_this)/360*2*pi)-1))+b_vis)*dt;
+    
+    if if_debug
+        figure(91);clf;
+        plot(prefs_vis,proba_vis/dt);
+        title('vis_{tuning}');
+    end
     
     % proba_targ: proba of firing of target neurons in response to visual targets
-    pos_targ = stim_this + [0:360/N_targets:359.9];
+    
+    % pos_targ = stim_this + [0:360/N_targets:359.9];
+    pos_targ = [-90 90]; % Always these two for fine discrimination task. HH2017
+
     proba_target_tuning = zeros(N_lip,1);
     for nn=1:N_targets
         proba_target_tuning = proba_target_tuning + ((max_rate_target-b_target)*...
@@ -220,7 +292,7 @@ for ss = 1:length(stim_positions)  % Motion directions
     
     
     % === Begin trials ===
-    for mm = 1:2 % Train and test sets
+    for mm = 1:if_test_set+1 % Train and test sets
         for tt = 1:N_trial % For each trial
             
             if round(tt/50)==tt/50
@@ -243,8 +315,13 @@ for ss = 1:length(stim_positions)  % Motion directions
             
             % -- Visual input spike train --
             % The stim_on_time controls when motion information comes in.
-            aux_proba_vis = proba_vis_tuning*[zeros(1,stim_on_time) ones(1,trial_dur_total-stim_on_time)]...
+            % aux_proba_vis = proba_vis*[zeros(1,stim_on_time) ones(1,trial_dur_total-stim_on_time)]...
+            %    + w_cov_vis*randn(N_vis,trial_dur_total);
+            
+            % Temporal dynamics added. HH2017
+            aux_proba_vis = proba_vis*[zeros(1,stim_on_time) vel*gain_vel_vis]...
                 + w_cov_vis*randn(N_vis,trial_dur_total);
+           
             spikes_vis{mm}(:,1:trial_dur_total,tt,ss)= rand(N_vis,trial_dur_total)<(aux_proba_vis);
             
             % -- Vestibular: too be added ---
@@ -282,7 +359,7 @@ for ss = 1:length(stim_positions)  % Motion directions
                     %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out{1}(:,k));
                     
                     % -- Termination --
-                    if ((max(decis_flag*decision_ac(:,k+1)) > decis_thres) && (RT(tt,ss)==0)) || (k==trial_dur_total-1)
+                    if ((range(if_bounded*decision_ac(:,k+1)) > decis_thres) && (RT(tt,ss)==0)) || (k==trial_dur_total-1)
                         RT(tt,ss) = k;
                         if k>fisher_wind_size-1   % << Enough data for Fisher info of at least one window >>
                             last_spikes__last_Fisher_win(:,count) = sum(spikes_lip{1}(:,k-fisher_wind_size+1:k)')';
@@ -345,28 +422,29 @@ end % of stimulus position
 
 
 %% == Plotting example network activities ==
-%%{
-figure(1001); clf
 
 rate_real_vis_aver = nanmean(spikes_vis{1}(:,:,:,1),3)/dt;
-
 rate_expected_lip_aver = nanmean(rate_lip{1}(:,:,:,1),3);
 rate_real_lip_aver = nanmean(spikes_lip{1}(:,:,:,1),3)/dt;
 
-for ttt = 1:trial_dur_total
+%{
+%%  Animation
+figure(1001); clf
+
+for ttt = 1:round(trial_dur_total/200):trial_dur_total
     % LIP layer
     subplot(2,1,1);
     plot(prefs_lip,rate_expected_lip_aver(:,ttt),'r');  hold on;
     plot(prefs_lip,rate_real_lip_aver(:,ttt),'k');  hold off;
-    set(gca,'xtick',0:90:360);
-    xlim([0 360]); ylim([-10 100]);
+    set(gca,'xtick',min(prefs_vis):90:max(prefs_vis));
+    xlim([min(prefs_vis) max(prefs_vis)]); ylim([-20 150]);
     title(ttt);
     
     % Visual layer
     subplot(2,1,2);
     plot(prefs_vis,rate_real_vis_aver(:,ttt),'k');  hold off;
-    set(gca,'xtick',0:90:360);
-    xlim([0 360]); ylim([-10 100]);
+    set(gca,'xtick',min(prefs_vis):90:max(prefs_vis));
+    xlim([min(prefs_vis) max(prefs_vis)]); ylim([-20 150]);
     
     drawnow;
 end
@@ -375,18 +453,48 @@ end
 %}
 
 %%{
-figure(1002); clf;
-to_plot_stim = 1;
-[~,pref_ind] = min(abs(prefs_lip - stim_positions(to_plot_stim)));
-[~,null_ind] = min(abs(prefs_lip - (stim_positions(to_plot_stim)+180)));
+%% Raster plot
+figure(1003); clf;
+set(gcf,'name','Raster','uni','norm','pos',[0.362       0.556       0.632       0.353]);
 
-for cc = 1:10:N_trial
-    plot(rate_lip{1}(pref_ind,:,cc,to_plot_stim),'r');
-    hold on; plot(rate_lip{1}(null_ind,:,cc,to_plot_stim),'b--');
-end
-plot(xlim,[decis_thres decis_thres],'k--');
+subplot(2,1,1);
+imagesc(ts,prefs_lip,rate_real_lip_aver*dt); axis xy;
+ylabel('LIP');  title(sprintf('Firing prob. for each bin, averaged over %g trials',N_trial));  colorbar
+
+subplot(2,1,2); 
+imagesc(ts,prefs_vis,rate_real_vis_aver*dt); axis xy; colorbar
+ylabel('Vis');
+
 %}
 
+%%{
+%%
+set(figure(1002),'name','PSTH','uni','norm','pos',[0.005 0.044 0.767 0.438]); clf;
+subplot(1,2,1);
+
+to_plot_heading = 1;
+[~,pref_ind] = min(abs(prefs_lip - 90)); % Left and right for the heading task
+[~,null_ind] = min(abs(prefs_lip - -90));
+
+for cc = 1:round(N_trial/10):N_trial
+    plot(ts,rate_lip{1}(pref_ind,:,cc,to_plot_heading),'r','linewid',2);
+    hold on; plot(rate_lip{1}(null_ind,:,cc,to_plot_heading),'k--','linewid',1);
+end
+
+plot(t_motion+stim_on_time,vel/max(vel)*max(ylim)/3,'k--');
+
+if if_bounded
+    plot(xlim,[decis_thres decis_thres],'k--');
+end
+
+title(sprintf('heading = %g, coh = %g',headings(to_plot_heading),coherence));
+
+subplot(1,2,2);
+plot(ts,nanmean(rate_lip{1}(pref_ind,:,:,to_plot_heading),3)-nanmean(rate_lip{1}(null_ind,:,:,to_plot_heading),3),'r');
+hold on; plot(t_motion+stim_on_time,vel/max(vel)*max(ylim)/3,'k--');
+title('pref-null');
+
+%}
 
 
 
