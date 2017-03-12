@@ -17,7 +17,7 @@ rand('state',sum(100*clock))
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % === Sizes ===
 % Input layers
-N_vis = 100; % Visual motion signal
+N_vis = 200; % Visual motion signal
 prefs_vis = 0:360/N_vis:359.9999;
 
 N_targets = 2; % Target input
@@ -41,7 +41,7 @@ decis_thres = 58; %% bound height
 
 % === Stimuli ===
 stim_positions = [90];
-coherence = 6.4;
+coherence = 30;
 
 % Parameters for MT from Mazurek and Shadlen, except width.
 % K_cov_mt and var_mt controls the correlations.
@@ -128,10 +128,10 @@ spikes_count_vis = cell(2,1); proba_count_lip = cell(2,1); spikes_count_lip = ce
 for m = 1:2 % Train and Test
     
     % Raw data
-    spikes_target{m} = zeros(N_lip,trial_dur_total,N_trial,length(stim_positions));
-    spikes_vis{m} = zeros(N_vis,trial_dur_total,N_trial,length(stim_positions));
+    spikes_target{m} = nan(N_lip,trial_dur_total,N_trial,length(stim_positions));
+    spikes_vis{m} = nan(N_vis,trial_dur_total,N_trial,length(stim_positions));
     rate_lip{m} = nan(N_lip,trial_dur_total,N_trial,length(stim_positions));
-    spikes_lip{m} = zeros(N_lip,trial_dur_total,N_trial,length(stim_positions));
+    spikes_lip{m} = nan(N_lip,trial_dur_total,N_trial,length(stim_positions));
     
     % Spike count in sliding windows for Fisher information
     spikes_count_vis{m} = zeros(N_vis, fisher_N_window, N_trial,length(stim_positions));
@@ -178,7 +178,7 @@ w_lip_lip = zeros(N_lip,N_lip);
 
 for nn=1:N_lip
     w_lip_vis(nn,:) = g_w_lip_vis/N_vis *(exp(K_lip_vis*(cos((prefs_vis-prefs_lip(nn))/360 *2*pi)-1)));  % << MT input >>
-    w_lip_targ(nn,:) = g_w_lip_targ/N_vis *(exp(K_lip_targ*(cos((prefs_vis-prefs_lip(nn))/360 *2*pi)-1)));  % << Target input >>
+    w_lip_targ(nn,:) = g_w_lip_targ/N_vis *(exp(K_lip_targ*(cos((prefs_lip-prefs_lip(nn))/360 *2*pi)-1)));  % << Target input >>
     w_lip_lip(nn,:) = g_w_lip_lip/N_lip*...   % << LIP recurrent >>
         ((exp(K_lip_lip*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
         amp_I*(exp(K_lip_I*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1))))...
@@ -214,7 +214,7 @@ for ss = 1:length(stim_positions)  % Motion directions
     proba_target_tuning = zeros(N_lip,1);
     for nn=1:N_targets
         proba_target_tuning = proba_target_tuning + ((max_rate_target-b_target)*...
-            exp(K_target*(cos((prefs_vis'-pos_targ(nn))/360*2*pi)-1))+b_target)*dt;
+            exp(K_target*(cos((prefs_lip'-pos_targ(nn))/360*2*pi)-1))+b_target)*dt;
     end
     proba_target_tuning = proba_target_tuning/(slope_norm_target*(N_targets/2)+dc_norm_target);   % << Divisive normalization >>
     
@@ -239,7 +239,7 @@ for ss = 1:length(stim_positions)  % Motion directions
             % so we deliberately ignore LIP dynamics during that period (although a little bit weird)!!
             
             aux_proba_target = proba_target_tuning*ones(1,trial_dur_total); % Expand along the time axis
-            spikes_target{mm}(:,:,tt,ss) = rand(N_vis,trial_dur_total)<(aux_proba_target);
+            spikes_target{mm}(:,:,tt,ss) = rand(N_lip,trial_dur_total)<(aux_proba_target);
             
             % -- Visual input spike train --
             % The stim_on_time controls when motion information comes in.
@@ -364,7 +364,7 @@ for ttt = 1:trial_dur_total
     
     % Visual layer
     subplot(2,1,2);
-    plot(prefs_lip,rate_real_vis_aver(:,ttt),'k');  hold off;
+    plot(prefs_vis,rate_real_vis_aver(:,ttt),'k');  hold off;
     set(gca,'xtick',0:90:360);
     xlim([0 360]); ylim([-10 100]);
     
