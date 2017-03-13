@@ -42,7 +42,7 @@ prefs_lip = linspace(-180,180,N_lip);
 dt = 1e-3; % Size of time bin in seconds
 trial_dur_total = 1700; %% in time bins (including pre_trial_dur)
 stim_on_time = 200; % Time of motion start, in time bins.
-N_trial = 20; % For each condition
+N_trial = 100; % For each condition
 
 ts = (0:trial_dur_total-1)*dt*1000; % in ms
 
@@ -506,7 +506,7 @@ end
 set(figure(1002),'name','PSTH','uni','norm','pos',[0.005 0.044 0.767 0.438]); clf;
 subplot(1,2,1);
 
-to_plot_heading = 1;
+to_plot_heading = length(headings);
 [~,pref_ind] = min(abs(prefs_lip - 90)); % Left and right for the heading task
 [~,null_ind] = min(abs(prefs_lip - -90));
 
@@ -529,6 +529,25 @@ hold on; plot(t_motion+stim_on_time,vel/max(vel)*max(ylim)/3,'k--');
 title(sprintf('averaged of %g trials, pref-null',N_trial));
 
 %}
+
+%% Behavior
+
+rate_lip_at_decision = squeeze(rate_lip{1}(:,end,:,:));
+[~, pos_max_rate_lip_at_decision] = max(rate_lip_at_decision,[],1);
+choices = prefs_lip(squeeze(pos_max_rate_lip_at_decision)) >= 0; % 1 = rightward, 0 = leftward
+figure(99); hold on;
+plot(headings,sum(choices,1)'/N_trial,'go','markersize',15); % Psychometric
+xxx = min(headings):0.1:max(headings);
+
+[bias, threshold] = cum_gaussfit_max1([headings' sum(choices,1)'/N_trial ]);
+plot(xxx,normcdf(xxx,bias,threshold),'g-','linewid',4);
+
+set(text(-8,0.6,sprintf('threshold = %g\n',threshold)),'color','g');                    
+   
+                  
+
+
+
 
 
 
