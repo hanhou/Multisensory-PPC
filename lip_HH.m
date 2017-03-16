@@ -27,16 +27,16 @@ if_bounded = 1; %% if_bounded = 1 means that the trial stops at the bound (react
 
 % === Sizes ===
 % Input layers
-N_vis = 200; % Visual motion signal
+N_vis = 100; % Visual motion signal
 prefs_vis = linspace(-180,180,N_vis);
 
-N_vest = 200; % Vestibular motion signal
+N_vest = 100; % Vestibular motion signal
 prefs_vest = linspace(-180,180,N_vis);
 
 N_targets = 2; % Target input
 
 % Output layers
-N_lip = 200;
+N_lip = 100;
 prefs_lip = linspace(-180,180,N_lip);
 
 [~,right_targ_ind] = min(abs(prefs_lip - 90)); % Left and right for the heading task
@@ -45,11 +45,11 @@ prefs_lip = linspace(-180,180,N_lip);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Decision bound
 f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = 10; %% bound height
+decis_thres = [3 6 3]; %% bound height, for different conditions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % === Times ===
-dt = 2e-3; % Size of time bin in seconds
+dt = 5e-3; % Size of time bin in seconds
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
 motion_duration = 1.5; % in s
@@ -65,11 +65,11 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % === Stimuli ===
-% unique_heading = [-8 0 8];
-% unique_condition = [3];
-unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
+unique_heading = [0 1 2 4 8];
 unique_condition = [1 2 3];
-N_trial = 100; % For each condition
+% unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
+% unique_condition = [1 2 3];
+N_trial = 50; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -128,7 +128,7 @@ vel(end) = [];
 
 % Gains
 gain_vel_vis = 5; % (m/s)^-1
-gain_acc_vest = 1.5; % (m^2/s)^-1
+gain_acc_vest = 2; % (m^2/s)^-1
 
 if if_debug
     figure(111);clf
@@ -161,14 +161,14 @@ dc_w_lip_vest = -5;
 
 
 % --- Targets to LIP
-g_w_lip_targ= 40;
+g_w_lip_targ= 30;
 K_lip_targ= 5;
 att_gain_targ = 0; % Drop in attention to visual target once motion stimulus appears.
 
 % --- Recurrent connectivity in LIP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 g_w_lip_lip = 15;
-K_lip_lip = 10;
+K_lip_lip = 5;
 dc_w_lip_lip = -7;
 
 amp_I = 0;  % Mexico hat shape
@@ -232,7 +232,7 @@ for m = 1:if_test_set+1 % Train and Test
 end
 
 % Output variables
-RT = zeros(N_trial,length(unique_heading));
+RT = (trial_dur_total-stim_on_time) * ones(N_trial,length(unique_heading),length(unique_condition));
 
 %  Network connections
 w_lip_vis = zeros(N_lip,N_vis);
@@ -455,12 +455,11 @@ for cc = 1:length(unique_condition)
                         %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out{1}(:,k));
 
                         % -- Termination --
-                        if (if_bounded && (f_bound(decision_ac(:,k+1)) > decis_thres)) || (k==trial_dur_total_in_bins-1)
+                        if if_bounded && att_gain_stim == 1 && (f_bound(decision_ac(:,k+1)) > decis_thres(unique_condition(cc)))
                             % Set the attention for motion stimuli to zero
-                            att_gain_stim = 0;
-
-                            RT(tt,hh,cc) = k;
-                            last_proba(:,count) = rate_lip{mm}(:,k,tt,hh,cc);
+                            att_gain_stim = 0.1;
+                            RT(tt,hh,cc) = (k-stim_on_time_in_bins)*dt;
+                            % last_proba(:,count) = rate_lip{mm}(:,k,tt,hh,cc);
                         end
                     end
                                         
@@ -607,18 +606,29 @@ plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
 
 % ====== Behavior performance ======
 %%{
-figure(99); clf; hold on;
+figure(99); clf; hold on; axis([-8 8 0 1]);
+set(gcf,'name','Behavior','uni','norm','pos',[0.32       0.071       0.357        0.83]);
 
+% Psychometric
+subplot(2,1,1);
 for cc = 1:length(unique_condition)
     % Make decisions
     rate_lip_at_decision = squeeze(rate_lip{1}(:,end,:,:,cc));
     [~, pos_max_rate_lip_at_decision] = max(rate_lip_at_decision,[],1);
     choices{cc} = prefs_lip(squeeze(pos_max_rate_lip_at_decision)) >= 0; % 1 = rightward, 0 = leftward
     
-    plot(unique_heading,sum(choices{cc},1)'/N_trial,'o','color',colors(unique_condition(cc),:),'markerfacecolor',colors(unique_condition(cc),:),'markersize',13); % Psychometric
-    xxx = min(unique_heading):0.1:max(unique_heading);
+    % I just flip the psychometric curve to the negative headings
+    psychometric = [unique_heading' sum(choices{cc},1)'/N_trial];
+    fake_psy = flipud(psychometric(unique_heading>0,:));
+    fake_psy(:,1) = -fake_psy(:,1);
+    fake_psy(:,2) = 1-fake_psy(:,2);
+    psychometric = [fake_psy ; psychometric];
     
-    [bias, threshold] = cum_gaussfit_max1([unique_heading' sum(choices{cc},1)'/N_trial ]);
+    plot(psychometric(:,1),psychometric(:,2),'o','color',colors(unique_condition(cc),:),'markerfacecolor',colors(unique_condition(cc),:),'markersize',13); % Psychometric
+    hold on;
+    xxx = -max(unique_heading):0.1:max(unique_heading);
+    
+    [bias, threshold] = cum_gaussfit_max1(psychometric);
     psycho(cc,:) = [bias,threshold];
     plot(xxx,normcdf(xxx,bias,threshold),'-','color',colors(unique_condition(cc),:),'linewid',4);
     
@@ -627,40 +637,56 @@ end
 
 if length(unique_condition) == 3
     pred_thres = (psycho(1,2)^(-2)+psycho(2,2)^(-2))^(-1/2);
-    set(text(-8,0.4+0.1*(cc+1),sprintf('pred = %g\n',pred_thres)),'color','k');
+    set(text(min(xlim),0.4+0.1*(cc+1),sprintf('pred = %g\n',pred_thres)),'color','k');
 end
+
+% Chronometric
+subplot(2,1,2);
+for cc = 1:length(unique_condition)
+    % Make decisions
+    RT_this_cc_mean = mean(RT(:,:,cc),1);
+    RT_this_cc_se = std(RT(:,:,cc),[],1);
+    
+    errorbar(unique_heading+(cc-2)*0.2,RT_this_cc_mean,RT_this_cc_se,'o-','color',colors(unique_condition(cc),:),...
+        'markerfacecolor',colors(unique_condition(cc),:),'markersize',10,'linew',2);
+    hold on;
+end
+plot(vel/max(vel)*max(xlim)/5,t_motion,'k--');
+title(sprintf('RT, all trials (correct + wrong), Bound = %s',num2str(decis_thres)));
+
 %}
 
 %% ===== Averaged PSTH, different angles =====
 %%{
 
-PSTH_condition_heading_choice = nan(length(ts),length(unique_condition),length(unique_heading),2);
+PSTH_condition_absheading_choice = nan(length(ts),length(unique_condition),length(unique_heading),2);
 
 set(figure(435),'name','PSTH'); clf;
 set(gcf,'uni','norm','pos',[0.326       0.041       0.668       0.681]);
-abs_unique_heading = unique(abs(unique_heading));
-sub_x = fix(sqrt(length(abs_unique_heading)));
-sub_y = ceil(length(abs_unique_heading)/sub_x);
+% abs_unique_heading = unique(abs(unique_heading));
+sub_x = fix(sqrt(length(unique_heading)));
+sub_y = ceil(length(unique_heading)/sub_x);
 y_max = -inf; y_min = inf;
 
-for hh = 1:length(abs_unique_heading)
+for hh = 1:length(unique_heading)
     
     % == Raw PSTH (stim type), heading, correct only
     figure(435); subplot(sub_x,sub_y,hh); hold on;
     
     for cc = 1:length(unique_condition)
-        select_pref_heading = unique_heading == abs_unique_heading(hh);
-        select_null_heading = unique_heading == -abs_unique_heading(hh);
         
-        select_pref_correct = choices{cc}(:,select_pref_heading) == 1;
-        select_null_correct = choices{cc}(:,select_null_heading) == 0;
+        % I assume "PREF" = "LEFT" here. In this case, with headings [0 1 2 4 8], I 
+        % plot the pref=90 neuron and the pref=-90 neuron in correct trials to simulate
+        % pref and null activity in correct only trials for each abs(heading) in my experiments.
+        select_correct = (choices{cc}(:,hh) == (unique_heading(hh)>=0)); 
         
-        PSTH_condition_heading_choice(:,cc,hh,1) = squeeze(nanmean(rate_lip{1}(right_targ_ind,:,select_pref_correct,select_pref_heading,cc),3));
-        PSTH_condition_heading_choice(:,cc,hh,2) = squeeze(nanmean(rate_lip{1}(right_targ_ind,:,select_null_correct,select_null_heading,cc),3));
+        % Although note here the PREF and NULL activity become correlated.
+        PSTH_condition_absheading_choice(:,cc,hh,1) = squeeze(nanmean(rate_lip{1}(right_targ_ind,:,select_correct,hh,cc),3));
+        PSTH_condition_absheading_choice(:,cc,hh,2) = squeeze(nanmean(rate_lip{1}(left_targ_ind,:,select_correct,hh,cc),3));
         
-        plot(ts,PSTH_condition_heading_choice(:,cc,hh,1),'color',colors(unique_condition(cc),:),'linew',2.5);
-        plot(ts,PSTH_condition_heading_choice(:,cc,hh,2),'--','color',colors(unique_condition(cc),:),'linew',2.5);
-        title(sprintf('abs(heading) = %g, %g trials, correct only',abs_unique_heading(hh),N_trial));        
+        plot(ts,PSTH_condition_absheading_choice(:,cc,hh,1),'color',colors(unique_condition(cc),:),'linew',2.5);
+        plot(ts,PSTH_condition_absheading_choice(:,cc,hh,2),'--','color',colors(unique_condition(cc),:),'linew',2.5);
+        title(sprintf('abs(heading) = %g, %g trials, correct only',abs(unique_heading(hh)),N_trial));        
     end
     
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
@@ -683,13 +709,13 @@ set(figure(436),'name','Delta PSTH'); clf;
 set(gcf,'uni','norm','pos',[0.326       0.041       0.668       0.681]);
 y_max = -inf; y_min = inf;
 
-for hh = 1:length(abs_unique_heading)
+for hh = 1:length(unique_heading)
     
     figure(436);  subplot(sub_x,sub_y,hh); hold on;
     
     for cc = 1:length(unique_condition)
-        plot(ts,PSTH_condition_heading_choice(:,cc,hh,1)-PSTH_condition_heading_choice(:,cc,hh,2),'color',colors(unique_condition(cc),:),'linew',2.5);
-        title(sprintf('abs(heading) = %g, %g trials, correct only',abs_unique_heading(hh),N_trial));
+        plot(ts,PSTH_condition_absheading_choice(:,cc,hh,1)-PSTH_condition_absheading_choice(:,cc,hh,2),'color',colors(unique_condition(cc),:),'linew',2.5);
+        title(sprintf('abs(heading) = %g, %g trials, correct only',abs(unique_heading(hh)),N_trial));
     end
     
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
