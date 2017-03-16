@@ -9,6 +9,8 @@ clear global
 
 load h
 
+tic;
+
 global Y_targ X_train;
 rand('state',sum(100*clock))
 
@@ -21,32 +23,39 @@ rand('state',sum(100*clock))
 if_debug = 1;
 if_test_set = 0;
 
-if_bounded = 0; %% decis_flag=1 means that the trial stops at the bound (reaction time version)
-decis_thres = 58; %% bound height
+if_bounded = 1; %% if_bounded = 1 means that the trial stops at the bound (reaction time version)
 
 % === Sizes ===
 % Input layers
-N_vis = 100; % Visual motion signal
+N_vis = 200; % Visual motion signal
 prefs_vis = linspace(-180,180,N_vis);
 
-N_vest = 100; % Vestibular motion signal
+N_vest = 200; % Vestibular motion signal
 prefs_vest = linspace(-180,180,N_vis);
 
 N_targets = 2; % Target input
 
 % Output layers
-N_lip = 100;
+N_lip = 200;
 prefs_lip = linspace(-180,180,N_lip);
 
+[~,right_targ_ind] = min(abs(prefs_lip - 90)); % Left and right for the heading task
+[~,left_targ_ind] = min(abs(prefs_lip - -90));
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Decision bound
+f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
+decis_thres = 10; %% bound height
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 % === Times ===
-dt = 1e-3; % Size of time bin in seconds
+dt = 2e-3; % Size of time bin in seconds
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
 motion_duration = 1.5; % in s
 
 trial_dur_total_in_bins = round(trial_dur_total/dt); %% in time bins (including pre_trial_dur)
 stim_on_time_in_bins = stim_on_time/dt; % Time of motion start, in time bins.
-N_trial = 100; % For each condition
 
 ts = ((0:trial_dur_total_in_bins-1)-stim_on_time_in_bins)*dt; % in s
 
@@ -54,9 +63,16 @@ if stim_on_time_in_bins>trial_dur_total_in_bins
     error('pre_trial_dur cannot be longer than trial_dur');
 end
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % === Stimuli ===
+% unique_heading = [-8 0 8];
+% unique_condition = [3];
 unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
 unique_condition = [1 2 3];
+N_trial = 100; % For each condition
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
 colors = [0 0 1; 1 0 0; 0 0.8 0.4];
 
 
@@ -126,7 +142,7 @@ end
 % === Network configuration ===
 
 % -- Time constant for integration
-time_const_lip = 1000e-3; % in s
+time_const_lip = 3000e-3; % in s
 time_const_vis  = time_const_lip;
 time_const_vest = time_const_lip;
 
@@ -134,25 +150,26 @@ time_const_vest = time_const_lip;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 g_w_lip_vis = 30;
 K_lip_vis = 5;
-dc_w_lip_vis = -5/100;
+dc_w_lip_vis = -5;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % -- Vestibular to LIP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 g_w_lip_vest = 30;
 K_lip_vest = 5;
-dc_w_lip_vest = -5/100;
+dc_w_lip_vest = -5;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 % --- Targets to LIP
 g_w_lip_targ= 40;
 K_lip_targ= 5;
-att_gain2_targ = 0; % Drop in attention to visual target once motion stimulus appears.
+att_gain_targ = 0; % Drop in attention to visual target once motion stimulus appears.
 
 % --- Recurrent connectivity in LIP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_lip = 25;
+g_w_lip_lip = 15;
 K_lip_lip = 10;
-dc_w_lip_lip = -10/100;
+dc_w_lip_lip = -7;
 
 amp_I = 0;  % Mexico hat shape
 K_lip_I = 2;
@@ -230,17 +247,17 @@ for nn=1:N_lip
     % -- Fine discrimination task --
     w_lip_vis(nn,:) = g_w_lip_vis/N_vis *(exp(K_lip_vis * (cos((prefs_lip(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
         .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_lip - +/-90) * Sin(heading)
-        + dc_w_lip_vis;   % Offset
+        + dc_w_lip_vis/N_vis;   % Offset
     w_lip_vest(nn,:) = g_w_lip_vest/N_vest *(exp(K_lip_vest * (cos((prefs_lip(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_lip - +/-90) * Sin(heading)
-        + dc_w_lip_vest;   % Offset
+        + dc_w_lip_vest/N_vest;   % Offset
     
     % -- Targ->LIP and LIP->LIP. These are the same for fine/coarse task --
     w_lip_targ(nn,:) = g_w_lip_targ/N_lip *(exp(K_lip_targ*(cos((prefs_lip-prefs_lip(nn))/360 *2*pi)-1)));  %  Target input
     w_lip_lip(nn,:) = g_w_lip_lip/N_lip*...   %  LIP recurrent
         ((exp(K_lip_lip*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
         amp_I*(exp(K_lip_I*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1))))...
-        + dc_w_lip_lip;
+        + dc_w_lip_lip/N_lip;
 end
 
 if if_debug
@@ -376,6 +393,9 @@ for cc = 1:length(unique_condition)
                     aux_proba_vest = 0*aux_proba_vest; % Shut down vestibular activity
                 end
                 
+                % -- Reset the attention for motion stimuli --
+                att_gain_stim = 1; % Drop in attention to motion stimuli due to the decision bound.
+                
                 spikes_vis{mm}(:,1:trial_dur_total_in_bins,tt,hh,cc)= rand(N_vis,trial_dur_total_in_bins)<(aux_proba_vis);
                 spikes_vest{mm}(:,1:trial_dur_total_in_bins,tt,hh,cc)= rand(N_vest,trial_dur_total_in_bins)<(aux_proba_vest);
                 
@@ -393,9 +413,11 @@ for cc = 1:length(unique_condition)
                     
                     % -- I don't understand yet why there are two variables aux1 and aux2 --
                     aux1_rate_lip(:,k+1) = (1-dt/time_const_vis)*aux1_rate_lip(:,k)...   %  Self dynamics.  in Hz!
-                        + 1/time_const_vis*(w_lip_vis*spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
-                        + w_lip_vest*spikes_vest{mm}(:,k,tt,hh,cc)...     % Vestibular input
-                        + w_lip_targ * att_gain2_targ * spikes_target{mm}(:,k,tt,hh,cc));             %  Target visual input (att_gain2 has been set to 0)
+                                      + 1/time_const_vis*(...
+                                              att_gain_stim * w_lip_vis * spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
+                                            + att_gain_stim * w_lip_vest * spikes_vest{mm}(:,k,tt,hh,cc)...     % Vestibular input
+                                            + att_gain_targ * w_lip_targ * spikes_target{mm}(:,k,tt,hh,cc)...
+                                                              );             %  Target visual input (att_gain2 has been set to 0)
                     
                     aux2_rate_lip(:,k+1) = (1-dt/time_const_lip)*aux2_rate_lip(:,k)+...  %  Self dynamics.  in Hz!
                         +1/time_const_lip*(w_lip_lip*spikes_lip{mm}(:,k,tt,hh,cc));  %  LIP recurrent. in Hz!
@@ -407,6 +429,7 @@ for cc = 1:length(unique_condition)
                     
                     % -- Variable used for stopping the integration --
                     
+                    %{
                     if mm == 1 % Only apply to train set
                         decision_ac(:,k+1) = rate_lip{mm}(:,k+1,tt,hh,cc);
                         %          decision_ac(:,k+1) = (1-delta_t/time_const_out)*decision_ac(:,k+1)+...
@@ -424,6 +447,23 @@ for cc = 1:length(unique_condition)
                             k=trial_dur_total_in_bins;  %  Terminate trial immediately
                         end
                     end
+                    %}
+                    
+                    if mm == 1 % Only apply to train set
+                        decision_ac(:,k+1) = rate_lip{mm}(:,k+1,tt,hh,cc);
+                        %          decision_ac(:,k+1) = (1-delta_t/time_const_out)*decision_ac(:,k+1)+...
+                        %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out{1}(:,k));
+
+                        % -- Termination --
+                        if (if_bounded && (f_bound(decision_ac(:,k+1)) > decis_thres)) || (k==trial_dur_total_in_bins-1)
+                            % Set the attention for motion stimuli to zero
+                            att_gain_stim = 0;
+
+                            RT(tt,hh,cc) = k;
+                            last_proba(:,count) = rate_lip{mm}(:,k,tt,hh,cc);
+                        end
+                    end
+                                        
                     k=k+1;
                 end  % of network dynamics
                 
@@ -537,32 +577,32 @@ end
 set(figure(1002),'name','Example PSTHs'); clf;
 set(gcf,'uni','norm','pos',[0.003       0.039       0.555       0.878]);
 
-[~,right90_ind] = min(abs(prefs_lip - 90)); % Left and right for the heading task
-[~,left90_ind] = min(abs(prefs_lip - -90));
-
 for cc = 1:length(unique_condition)
-    subplot(3,2,2*cc-1);
+    subplot(3,2,2*unique_condition(cc)-1);
     
     for trialtoplot = 1:round(N_trial/10):N_trial
-        plot(ts,rate_lip{1}(right90_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(cc,:),'linewid',2); hold on;
-        plot(ts,rate_lip{1}(left90_ind,:,trialtoplot,to_plot_heading,cc),'--','color',colors(cc,:),'linewid',1);
+        plot(ts,rate_lip{1}(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
+        plot(ts,rate_lip{1}(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--','color',colors(unique_condition(cc),:),'linewid',1);
     end
     plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
     axis tight;
     
-    if if_bounded
-        plot(xlim,[decis_thres decis_thres],'k--');
-    end
+%     if if_bounded
+%         plot(xlim,[decis_thres decis_thres],'k--');
+%         ylim([min(ylim),decis_thres*1.1]);
+%     end
     
     title(sprintf('rate\\_lip, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
     
     subplot(3,2,2);
-    plot(ts,nanmean(rate_lip{1}(right90_ind,:,:,to_plot_heading,cc),3)...
-        -nanmean(rate_lip{1}(left90_ind,:,:,to_plot_heading,cc),3),'color',colors(cc,:),'linew',2);
-    hold on; plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
+    plot(ts,nanmean(rate_lip{1}(right_targ_ind,:,:,to_plot_heading,cc),3)...
+        -nanmean(rate_lip{1}(left_targ_ind,:,:,to_plot_heading,cc),3),'color',colors(unique_condition(cc),:),'linew',2);
+    hold on;
     title(sprintf('averaged of all %g trials (correct + wrong), pref-null',N_trial));
     axis tight;
 end
+plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
+
 %}
 
 % ====== Behavior performance ======
@@ -585,9 +625,10 @@ for cc = 1:length(unique_condition)
     set(text(min(xlim),0.4+0.1*cc,sprintf('threshold = %g\n',threshold)),'color',colors(unique_condition(cc),:));
 end
 
-pred_thres = (psycho(1,2)^(-2)+psycho(2,2)^(-2))^(-1/2);
-set(text(-8,0.4+0.1*(cc+1),sprintf('pred = %g\n',pred_thres)),'color','k');
-
+if length(unique_condition) == 3
+    pred_thres = (psycho(1,2)^(-2)+psycho(2,2)^(-2))^(-1/2);
+    set(text(-8,0.4+0.1*(cc+1),sprintf('pred = %g\n',pred_thres)),'color','k');
+end
 %}
 
 %% ===== Averaged PSTH, different angles =====
@@ -595,7 +636,7 @@ set(text(-8,0.4+0.1*(cc+1),sprintf('pred = %g\n',pred_thres)),'color','k');
 
 PSTH_condition_heading_choice = nan(length(ts),length(unique_condition),length(unique_heading),2);
 
-set(figure(435),'name','PSTH');
+set(figure(435),'name','PSTH'); clf;
 set(gcf,'uni','norm','pos',[0.326       0.041       0.668       0.681]);
 abs_unique_heading = unique(abs(unique_heading));
 sub_x = fix(sqrt(length(abs_unique_heading)));
@@ -614,26 +655,31 @@ for hh = 1:length(abs_unique_heading)
         select_pref_correct = choices{cc}(:,select_pref_heading) == 1;
         select_null_correct = choices{cc}(:,select_null_heading) == 0;
         
-        PSTH_condition_heading_choice(:,cc,hh,1) = squeeze(nanmean(rate_lip{1}(right90_ind,:,select_pref_correct,select_pref_heading,cc),3));
-        PSTH_condition_heading_choice(:,cc,hh,2) = squeeze(nanmean(rate_lip{1}(right90_ind,:,select_null_correct,select_null_heading,cc),3));
+        PSTH_condition_heading_choice(:,cc,hh,1) = squeeze(nanmean(rate_lip{1}(right_targ_ind,:,select_pref_correct,select_pref_heading,cc),3));
+        PSTH_condition_heading_choice(:,cc,hh,2) = squeeze(nanmean(rate_lip{1}(right_targ_ind,:,select_null_correct,select_null_heading,cc),3));
         
-        plot(ts,PSTH_condition_heading_choice(:,cc,hh,1),'color',colors(cc,:),'linew',2.5);
-        plot(ts,PSTH_condition_heading_choice(:,cc,hh,2),'--','color',colors(cc,:),'linew',2.5);
-        title(sprintf('PSTH, abs(heading) = %g, %g trials, correct only',abs_unique_heading(hh),N_trial));
-        
+        plot(ts,PSTH_condition_heading_choice(:,cc,hh,1),'color',colors(unique_condition(cc),:),'linew',2.5);
+        plot(ts,PSTH_condition_heading_choice(:,cc,hh,2),'--','color',colors(unique_condition(cc),:),'linew',2.5);
+        title(sprintf('abs(heading) = %g, %g trials, correct only',abs_unique_heading(hh),N_trial));        
     end
     
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
-    y_min = min(y_min,min(ylim));
-    y_max = max(y_max,max(ylim));
     axis tight;
     
+%     if if_bounded
+%         plot(xlim,[decis_thres decis_thres],'k--');
+%         ylim([min(ylim),decis_thres*1.1]);
+%     end
+    
+    y_min = min(y_min,min(ylim));
+    y_max = max(y_max,max(ylim));
+   
 end
 
 set(findobj(435,'type','axes'),'ylim',[y_min y_max]);
 
 % =====  Delta-PSTH (stim type), heading, correct only ====
-set(figure(436),'name','Delta PSTH');
+set(figure(436),'name','Delta PSTH'); clf;
 set(gcf,'uni','norm','pos',[0.326       0.041       0.668       0.681]);
 y_max = -inf; y_min = inf;
 
@@ -642,8 +688,8 @@ for hh = 1:length(abs_unique_heading)
     figure(436);  subplot(sub_x,sub_y,hh); hold on;
     
     for cc = 1:length(unique_condition)
-        plot(ts,PSTH_condition_heading_choice(:,cc,hh,1)-PSTH_condition_heading_choice(:,cc,hh,2),'color',colors(cc,:),'linew',2.5);
-        title(sprintf('diff-PSTH, abs(heading) = %g, %g trials, correct only',abs_unique_heading(hh),N_trial));
+        plot(ts,PSTH_condition_heading_choice(:,cc,hh,1)-PSTH_condition_heading_choice(:,cc,hh,2),'color',colors(unique_condition(cc),:),'linew',2.5);
+        title(sprintf('abs(heading) = %g, %g trials, correct only',abs_unique_heading(hh),N_trial));
     end
     
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
@@ -655,6 +701,6 @@ set(findobj(436,'type','axes'),'ylim',[y_min y_max]);
 
 %}
 
-
+toc
 
 
