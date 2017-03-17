@@ -49,14 +49,14 @@ prefs_lip = linspace(-180,180,N_lip);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Decision bound
-if_bounded = 0; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
+if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
 f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = [3 6 3]; % bound height, for different conditions
+decis_thres = 10*[1 1 1]; % bound height, for different conditions
 att_gain_stim_after_hit_bound = [0 0 0];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % === Times ===
-dt = 2e-3; % Size of time bin in seconds
+dt = 4e-3; % Size of time bin in seconds
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
 motion_duration = 1.5; % in s
@@ -74,8 +74,8 @@ end
 % === Stimuli ===
 % unique_heading = [0 1 2 4 8];
 % unique_condition = [1 2 3];
-unique_heading = [ 8];
-unique_condition = [3];
+unique_heading = [0 1 2 4 8];
+unique_condition = [1 2 3];
 N_trial = 10; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -150,7 +150,7 @@ end
 
 % -- Time constant for integration
 time_const_int = 10000e-3; % in s
-time_const_lip = 100e-3; % in s
+time_const_lip = 200e-3; % in s
 
 % -- Visual to INTEGRATOR
 g_w_int_vis = 25;
@@ -163,28 +163,28 @@ K_int_vest = 5;
 dc_w_int_vest = -0;
 
 % --- Targets to LIP ----
-g_w_lip_targ= 30;
-K_lip_targ= 5;
+g_w_lip_targ= 10;
+K_lip_targ= 20;
 att_gain_targ = 1; % Drop in attention to visual target once motion stimulus appears.
 
-% --- Recurrent connectivity in INTEGRATOR
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_int_int = 35;
-K_int_int = 10;
-dc_w_int_int = -11;
-
-amp_I_int = 0;  % Mexico hat shape
-K_int_I = 2;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% Input-output function of INTEGRATOR
+% % --- Recurrent connectivity in INTEGRATOR
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% g_w_int_int = 35;
+% K_int_int = 10;
+% dc_w_int_int = -11;
+%
+% amp_I_int = 0;  % Mexico hat shape
+% K_int_I = 2;
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% % Input-output function of INTEGRATOR
 bias_int = 0;
 threshold_int = 0.0;
 
 % --- INTEGRATOR to the real LIP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_int = 25;
-K_lip_int = 10;
+g_w_lip_int = 10;
+K_lip_int = 5;
 dc_w_lip_int = 0;
 
 amp_I_lip_int = 0;  % Mexico hat shape
@@ -193,9 +193,9 @@ K_lip_int_I = 2;
 
 % --- LIP recurrent connection
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_lip = 25;
-K_lip_lip = 8;
-dc_w_lip_lip = -11;
+g_w_lip_lip = 15;
+K_lip_lip = 20;
+dc_w_lip_lip = -7;
 
 amp_I_lip = 0;  % Mexico hat shape
 K_lip_I = 2;
@@ -234,7 +234,7 @@ aux2_rate_int = zeros(N_int,trial_dur_total_in_bins+2);
 
 decision_ac = zeros(N_int,trial_dur_total_in_bins+2);
 
-spikes_target = cell(2,1); spikes_vis = cell(2,1); spikes_vest = cell(2,1); 
+spikes_target = cell(2,1); spikes_vis = cell(2,1); spikes_vest = cell(2,1);
 rate_int = cell(2,1); spikes_int = cell(2,1);
 rate_lip = cell(2,1); spikes_lip = cell(2,1);
 
@@ -289,10 +289,10 @@ for nn=1:N_int
     w_lip_targ(nn,:) = g_w_lip_targ/N_int *(exp(K_lip_targ*(cos((prefs_int-prefs_int(nn))/360 *2*pi)-1)));  %  Target input
     
     % -- Int->Int --
-    w_int_int(nn,:) = g_w_int_int/N_int*...   %  Integrator recurrent
-        ((exp(K_int_int*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1)))-...
-        amp_I_int*(exp(K_int_I*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1))))...
-        + dc_w_int_int/N_int;
+    %     w_int_int(nn,:) = g_w_int_int/N_int*...   %  Integrator recurrent
+    %         ((exp(K_int_int*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1)))-...
+    %         amp_I_int*(exp(K_int_I*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1))))...
+    %         + dc_w_int_int/N_int;
     
 end
 
@@ -302,13 +302,13 @@ for nn=1:N_lip
         ((exp(K_lip_int*(cos((prefs_lip-prefs_int(nn))/360*2*pi)-1)))-...
         amp_I_lip_int*(exp(K_lip_int_I*(cos((prefs_lip-prefs_int(nn))/360*2*pi)-1))))...
         + dc_w_lip_int/N_int;
-
+    
     % -- LIP->LIP --
     w_lip_lip(nn,:) = g_w_lip_lip/N_lip*...
         ((exp(K_lip_lip*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
         amp_I_lip*(exp(K_lip_I*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1))))...
         + dc_w_lip_lip/N_lip;
-end    
+end
 
 if if_debug
     figure(90); clf;
@@ -316,19 +316,25 @@ if if_debug
     
     subplot(4,3,1);
     imagesc(prefs_lip,prefs_lip,w_lip_lip'); colorbar; axis  xy; title('LIP->LIP');
-    xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
-    set(gca,'xtick',-180:90:180);
-
+    xlabel('\theta_{lip}'); ylabel('\theta_{lip}'); 
+    set(gca,'xtick',-180:90:180); 
+    hold on; plot(prefs_lip,w_lip_lip(:,end/2)/max(w_lip_lip(:,end/2))*100,'linew',3,'color','c');
+    plot(xlim,[0 0],'--c');
+    
     subplot(4,3,4);
     imagesc(prefs_lip,prefs_int,w_lip_int'); colorbar; axis  xy; title('Int->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{int}');
     set(gca,'xtick',-180:90:180);
+    hold on; plot(prefs_lip,w_lip_int(:,end/2)/max(w_lip_int(:,end/2))*100,'linew',3,'color','c');
+    plot(xlim,[0 0],'--c');
     
     subplot(4,3,7);
     % surf(prefs_int,prefs_int,w_int_int');
     imagesc(prefs_int,prefs_int,w_int_int');    colorbar; axis xy; title('Int->Int');
     xlabel('\theta_{int}'); ylabel('\theta_{int}');
     set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
+    hold on; plot(prefs_int,w_int_int(:,end/2)/max(w_int_int(:,end/2))*100,'linew',3,'color','c');
+    plot(xlim,[0 0],'--c');
     
     %     subplot(4,3,7);
     %     imagesc(prefs_int,prefs_vest,w_int_vest'); colorbar; axis  xy; title('Vest->Int');
@@ -339,6 +345,8 @@ if if_debug
     imagesc(prefs_int,prefs_vis,w_int_vis'); colorbar; axis  xy; title('Vis/Vest->Int');
     xlabel('\theta_{int}'); ylabel('\theta_{vis/vest}'); ylim([-20 20]);
     set(gca,'xtick',-180:90:180);
+    hold on; plot(prefs_int,w_int_vis(:,end/2)/max(w_int_vis(:,end/2))*20,'linew',3,'color','c');
+    plot(xlim,[0 0],'--c');
     
     colormap hot;
 end
@@ -489,21 +497,26 @@ for cc = 1:length(unique_condition)
                     %
                     
                     % -- Update INTEGRATOR layer --
-                    rate_int{mm}(:,k+1,tt,hh,cc) = bias_int + (1-dt/time_const_int)*rate_int{mm}(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
-                        + 1/time_const_int * (...
-                              w_int_int * spikes_int{mm}(:,k,tt,hh,cc)... %  INTEGRATOR recurrent
-                            + att_gain_stim * w_int_vis * spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
-                            + att_gain_stim * w_int_vest * spikes_vest{mm}(:,k,tt,hh,cc)...     % Vestibular input
-                        ... % + att_gain_targ * w_int_targ * spikes_target{mm}(:,k,tt,hh,cc)...  % No longer here. HH20170317
-                        );            
+                    %                     rate_int{mm}(:,k+1,tt,hh,cc) = bias_int + (1-dt/time_const_int)*rate_int{mm}(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
+                    %                         + 1/time_const_int * (...
+                    %                               w_int_int * spikes_int{mm}(:,k,tt,hh,cc)... %  INTEGRATOR recurrent
+                    %                             + att_gain_stim * w_int_vis * spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
+                    %                             + att_gain_stim * w_int_vest * spikes_vest{mm}(:,k,tt,hh,cc)...     % Vestibular input
+                    %                         ... % + att_gain_targ * w_int_targ * spikes_target{mm}(:,k,tt,hh,cc)...  % No longer here. HH20170317
+                    %                         );
+                    
+                    % Just let the INTEGRATOR to be ideal. (straight sum) 
+                    rate_int{mm}(:,k+1,tt,hh,cc) = rate_int{mm}(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
+                        + att_gain_stim * w_int_vis * spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
+                        + att_gain_stim * w_int_vest * spikes_vest{mm}(:,k,tt,hh,cc);     % Vestibular input
                     
                     % -- Update LIP layer --
                     rate_lip{mm}(:,k+1,tt,hh,cc) = bias_lip + (1-dt/time_const_lip)*rate_lip{mm}(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
                         + 1/time_const_lip * (...
-                              w_lip_lip * spikes_lip{mm}(:,k,tt,hh,cc)...  %  LIP recurrent
-                            + att_gain_targ * w_lip_targ * spikes_target{mm}(:,k,tt,hh,cc)...  % Moved here. HH20170317
-                            + w_lip_int * spikes_int{mm}(:,k,tt,hh,cc)... %  INTEGRATOR->LIP
-                        );            
+                          w_lip_lip * spikes_lip{mm}(:,k,tt,hh,cc)...  %  LIP recurrent
+                        + att_gain_targ * w_lip_targ * spikes_target{mm}(:,k,tt,hh,cc)...  % Target input moved here. HH20170317
+                        + w_lip_int * spikes_int{mm}(:,k,tt,hh,cc)... %  INTEGRATOR->LIP
+                        );
                     
                     
                     % -- Turn rate to binary spike for the next step --
@@ -608,34 +621,42 @@ rate_expected_int_aver = nanmean(rate_int{1}(:,:,:,to_plot_heading,to_plot_cond)
 rate_expected_lip_aver = nanmean(rate_lip{1}(:,:,:,to_plot_heading,to_plot_cond),3);
 rate_real_int_aver = nanmean(spikes_int{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
 rate_real_lip_aver = nanmean(spikes_lip{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-
+rate_real_targ_aver = nanmean(spikes_target{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
 
 %{
 %%  ====== Animation ======
 figure(1001); clf
 
-for ttt = 1:length(ts)
-    % LIP layer
-    subplot(3,1,1);
-    plot(prefs_lip,rate_expected_lip_aver(:,ttt),'r');  hold on;
-    plot(prefs_lip,rate_real_lip_aver(:,ttt),'k');  hold off;
-    set(gca,'xtick',min(prefs_lip:90:max(prefs_lip)));
-    xlim([min(prefs_lip) max(prefs_lip)]);  ylim([-20 50]);
-    title(ttt*dt*1000);
+for ttt = 1:10:length(ts)
 
     % INTEGRATOR layer
-    subplot(3,1,2);
-    plot(prefs_int,rate_expected_int_aver(:,ttt),'r');  hold on;
-    plot(prefs_int,rate_real_int_aver(:,ttt),'k');  hold off;
-    set(gca,'xtick',min(prefs_int):90:max(prefs_int));
-    xlim([min(prefs_int) max(prefs_int)]);  ylim([-20 50]);
-    
+    subplot(2,2,1);
+    h=plotyy(prefs_int,rate_expected_int_aver(:,ttt),prefs_int,rate_real_int_aver(:,ttt)); 
+    axis(h(1),[min(prefs_int) max(prefs_int) min(rate_expected_int_aver(:)) max(rate_expected_int_aver(:))]);
+    axis(h(2),[min(prefs_int) max(prefs_int) min(rate_real_int_aver(:)) max(rate_real_int_aver(:))]);
+    title('Integrator');
+
+    % LIP layer
+    subplot(2,2,2);
+    h=plotyy(prefs_int,rate_expected_lip_aver(:,ttt),prefs_int,rate_real_lip_aver(:,ttt)); 
+    axis(h(1),[min(prefs_int) max(prefs_int) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))]);
+    axis(h(2),[min(prefs_int) max(prefs_int) min(rate_real_lip_aver(:)) max(rate_real_lip_aver(:))]);
+    title(sprintf('LIP, t = %g',ttt*dt*1000));
+
     % Visual layer
-    subplot(3,1,3);
-    plot(prefs_vis,rate_real_vis_aver(:,ttt),'k');  hold off;
-    set(gca,'xtick',min(prefs_vis):90:max(prefs_vis));
-    xlim([min(prefs_vis) max(prefs_vis)]);  ylim([-20 50]);
+    subplot(2,2,3);
+    h=plotyy(prefs_int,aux_proba_vis(:,ttt)/dt,prefs_int,rate_real_vis_aver(:,ttt)); 
+    axis(h(1),[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(aux_proba_vis(:)/dt)]);
+    axis(h(2),[min(prefs_int) max(prefs_int) min(rate_real_vis_aver(:)) max(rate_real_vis_aver(:))]);
+    title('Visual');
     
+    % Target layer
+    subplot(2,2,4);
+    h=plotyy(prefs_int,proba_target_tuning/dt,prefs_int,rate_real_targ_aver(:,ttt)); 
+    axis(h(1),[min(prefs_int) max(prefs_int) min(proba_target_tuning(:)/dt) max(proba_target_tuning(:)/dt)]);
+    axis(h(2),[min(prefs_int) max(prefs_int) min(rate_real_targ_aver(:)) max(rate_real_targ_aver(:))]);
+    title('Target');
+
     drawnow;
 end
 
@@ -651,7 +672,7 @@ if if_debug
     ylabel('LIP');
     title(sprintf('Firing prob. for each bin, averaged over %g trials, cond = %g, heading = %g',...
         N_trial,unique_condition(to_plot_cond),unique_heading(to_plot_heading)));  colorbar
-
+    
     subplot(4,3,[5 6]);
     imagesc(ts,prefs_int,rate_real_int_aver*dt); axis xy; colorbar
     ylabel('INTEGRATOR');
@@ -676,7 +697,7 @@ for cc = 1:length(unique_condition)
     % --- LIP ---
     subplot(3,2,2*unique_condition(cc)-1);
     
-    for trialtoplot = 1:round(N_trial/10):N_trial
+    for trialtoplot = 1:ceil(N_trial/10):N_trial
         plot(ts,rate_lip{1}(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
         plot(ts,rate_lip{1}(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
     end
@@ -693,7 +714,7 @@ for cc = 1:length(unique_condition)
     % --- Int ---
     subplot(3,2,2*unique_condition(cc));
     
-    for trialtoplot = 1:round(N_trial/10):N_trial
+    for trialtoplot = 1:ceil(N_trial/10):N_trial
         plot(ts,rate_int{1}(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
         plot(ts,rate_int{1}(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
     end
@@ -733,7 +754,7 @@ for cc = 1:length(unique_condition)
     choices{cc} = prefs_int(shiftdim(pos_max_rate_int_at_decision)) >= 0; % 1 = rightward, 0 = leftward
     
     % I just flip the psychometric curve to the negative headings
-    psychometric = [unique_heading' sum(choices{cc}(:),1)'/N_trial];
+    psychometric = [unique_heading' sum(reshape(choices{cc},[],length(unique_heading)),1)'/N_trial];
     fake_psy = flipud(psychometric(unique_heading>0,:));
     fake_psy(:,1) = -fake_psy(:,1);
     fake_psy(:,2) = 1-fake_psy(:,2);
@@ -830,8 +851,8 @@ for hh = 1:length(unique_heading)
     
     for cc = 1:length(unique_condition)
         plot(ts,PSTH_condition_absheading_choice(:,cc,hh,1)-PSTH_condition_absheading_choice(:,cc,hh,2),'color',colors(unique_condition(cc),:),'linew',2.5);
-        title(sprintf('abs(heading) = %g, %g trials, correct only',abs(unique_heading(hh)),N_trial));
     end
+    title(sprintf('abs(heading) = %g, %g trials, correct only',abs(unique_heading(hh)),N_trial));
     
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
     y_min = min(y_min,min(ylim));
