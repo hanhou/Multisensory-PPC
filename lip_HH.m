@@ -65,11 +65,11 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % === Stimuli ===
-unique_heading = [0 1 2 4 8];
-unique_condition = [1 2 3];
+unique_heading = [8];
+unique_condition = [ 3];
 % unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
 % unique_condition = [1 2 3];
-N_trial = 50; % For each condition
+N_trial = 10; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -618,7 +618,7 @@ for cc = 1:length(unique_condition)
     choices{cc} = prefs_lip(squeeze(pos_max_rate_lip_at_decision)) >= 0; % 1 = rightward, 0 = leftward
     
     % I just flip the psychometric curve to the negative headings
-    psychometric = [unique_heading' sum(choices{cc},1)'/N_trial];
+    psychometric = [unique_heading' sum(reshape(choices{cc},length(unique_heading),[]),1)'/N_trial];
     fake_psy = flipud(psychometric(unique_heading>0,:));
     fake_psy(:,1) = -fake_psy(:,1);
     fake_psy(:,2) = 1-fake_psy(:,2);
