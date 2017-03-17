@@ -616,9 +616,10 @@ for cc = 1:length(unique_condition)
     rate_lip_at_decision = squeeze(rate_lip{1}(:,end,:,:,cc));
     [~, pos_max_rate_lip_at_decision] = max(rate_lip_at_decision,[],1);
     choices{cc} = prefs_lip(squeeze(pos_max_rate_lip_at_decision)) >= 0; % 1 = rightward, 0 = leftward
+    choices{cc} = reshape(choices{cc},[],length(unique_heading));
     
     % I just flip the psychometric curve to the negative headings
-    psychometric = [unique_heading' sum(reshape(choices{cc},length(unique_heading),[]),1)'/N_trial];
+    psychometric = [unique_heading' sum(choices{cc},1)'/N_trial];
     fake_psy = flipud(psychometric(unique_heading>0,:));
     fake_psy(:,1) = -fake_psy(:,1);
     fake_psy(:,2) = 1-fake_psy(:,2);
