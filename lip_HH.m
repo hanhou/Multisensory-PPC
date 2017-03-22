@@ -49,9 +49,9 @@ prefs_lip = linspace(-180,180,N_lip);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Decision bound
-if_bounded = 0; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
+if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
 f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = [3 6 3]; % bound height, for different conditions
+decis_thres = 70*[1 1 1]; % bound height, for different conditions
 att_gain_stim_after_hit_bound = [0 0 0];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -76,7 +76,7 @@ end
 % unique_condition = [1 2 3];
 unique_heading = [0 1 2 4 8];
 unique_condition = [1 2 3];
-N_trial = 10; % For each condition
+N_trial = 20; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -149,7 +149,7 @@ end
 % === Network configuration ===
 
 % -- Time constant for integration
-time_const_int = 10000e-3; % in s
+time_const_int = 3000e-3; % in s
 time_const_lip = 100e-3; % in s
 
 % -- Visual to INTEGRATOR
@@ -163,8 +163,8 @@ K_int_vest = 5;
 dc_w_int_vest = -0;
 
 % --- Targets to LIP ----
-g_w_lip_targ= 30;
-K_lip_targ= 5;
+g_w_lip_targ= 10;
+K_lip_targ= 20;
 att_gain_targ = 1; % Drop in attention to visual target once motion stimulus appears.
 
 % --- Recurrent connectivity in INTEGRATOR
@@ -183,8 +183,8 @@ threshold_int = 0.0;
 
 % --- INTEGRATOR to the real LIP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_int = 25;
-K_lip_int = 10;
+g_w_lip_int = 20;
+K_lip_int = 5;
 dc_w_lip_int = 0;
 
 amp_I_lip_int = 0;  % Mexico hat shape
@@ -193,9 +193,9 @@ K_lip_int_I = 2;
 
 % --- LIP recurrent connection
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_lip = 25;
-K_lip_lip = 8;
-dc_w_lip_lip = -11;
+g_w_lip_lip = 15;
+K_lip_lip = 20;
+dc_w_lip_lip = -7;
 
 amp_I_lip = 0;  % Mexico hat shape
 K_lip_I = 2;
@@ -318,17 +318,22 @@ if if_debug
     imagesc(prefs_lip,prefs_lip,w_lip_lip'); colorbar; axis  xy; title('LIP->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
     set(gca,'xtick',-180:90:180);
-
+    hold on; plot(prefs_lip,w_lip_lip(:,end/2)/max(w_lip_lip(:,end/2))*100,'linew',3,'color','c');
+    plot(xlim,[0 0],'--c');
     subplot(4,3,4);
     imagesc(prefs_lip,prefs_int,w_lip_int'); colorbar; axis  xy; title('Int->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{int}');
     set(gca,'xtick',-180:90:180);
+    hold on; plot(prefs_lip,w_lip_int(:,end/2)/max(w_lip_int(:,end/2))*100,'linew',3,'color','c');
+    plot(xlim,[0 0],'--c');
     
     subplot(4,3,7);
     % surf(prefs_int,prefs_int,w_int_int');
     imagesc(prefs_int,prefs_int,w_int_int');    colorbar; axis xy; title('Int->Int');
     xlabel('\theta_{int}'); ylabel('\theta_{int}');
     set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
+    hold on; plot(prefs_int,w_int_int(:,end/2)/max(w_int_int(:,end/2))*100,'linew',3,'color','c');
+    plot(xlim,[0 0],'--c');
     
     %     subplot(4,3,7);
     %     imagesc(prefs_int,prefs_vest,w_int_vest'); colorbar; axis  xy; title('Vest->Int');
@@ -339,6 +344,8 @@ if if_debug
     imagesc(prefs_int,prefs_vis,w_int_vis'); colorbar; axis  xy; title('Vis/Vest->Int');
     xlabel('\theta_{int}'); ylabel('\theta_{vis/vest}'); ylim([-20 20]);
     set(gca,'xtick',-180:90:180);
+    hold on; plot(prefs_int,w_int_vis(:,end/2)/max(w_int_vis(:,end/2))*20,'linew',3,'color','c');
+    plot(xlim,[0 0],'--c');
     
     colormap hot;
 end
@@ -533,13 +540,13 @@ for cc = 1:length(unique_condition)
                     %}
                     
                     if mm == 1 % Only apply to train set
-                        decision_ac(:,k+1) = rate_int{mm}(:,k+1,tt,hh,cc);
+                        decision_ac(:,k+1) = rate_lip{mm}(:,k+1,tt,hh,cc);
                         %          decision_ac(:,k+1) = (1-delta_t/time_const_out)*decision_ac(:,k+1)+...
                         %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out{1}(:,k));
                         
                         % -- Termination --
                         if if_bounded && att_gain_stim == 1 && (f_bound(decision_ac(:,k+1)) > decis_thres(unique_condition(cc)))
-                            % Set the attention for motion stimuli to zero
+                            % Set the attention for motion stimuli to be very low
                             att_gain_stim = att_gain_stim_after_hit_bound(unique_condition(cc));
                             RT(tt,hh,cc) = (k-stim_on_time_in_bins)*dt;
                             % last_proba(:,count) = rate_int{mm}(:,k,tt,hh,cc);
@@ -608,6 +615,7 @@ rate_expected_int_aver = nanmean(rate_int{1}(:,:,:,to_plot_heading,to_plot_cond)
 rate_expected_lip_aver = nanmean(rate_lip{1}(:,:,:,to_plot_heading,to_plot_cond),3);
 rate_real_int_aver = nanmean(spikes_int{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
 rate_real_lip_aver = nanmean(spikes_lip{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+rate_real_targ_aver = nanmean(spikes_target{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
 
 
 %{
@@ -676,7 +684,7 @@ for cc = 1:length(unique_condition)
     % --- LIP ---
     subplot(3,2,2*unique_condition(cc)-1);
     
-    for trialtoplot = 1:round(N_trial/10):N_trial
+    for trialtoplot = 1:ceil(N_trial/10):N_trial
         plot(ts,rate_lip{1}(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
         plot(ts,rate_lip{1}(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
     end
@@ -693,7 +701,7 @@ for cc = 1:length(unique_condition)
     % --- Int ---
     subplot(3,2,2*unique_condition(cc));
     
-    for trialtoplot = 1:round(N_trial/10):N_trial
+    for trialtoplot = 1:ceil(N_trial/10):N_trial
         plot(ts,rate_int{1}(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
         plot(ts,rate_int{1}(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
     end
@@ -731,9 +739,10 @@ for cc = 1:length(unique_condition)
     
     [~, pos_max_rate_int_at_decision] = max(rate_int_at_decision,[],1);
     choices{cc} = prefs_int(shiftdim(pos_max_rate_int_at_decision)) >= 0; % 1 = rightward, 0 = leftward
-     
+    choices{cc} = reshape(choices{cc},[],length(unique_heading));
+
     % I just flip the psychometric curve to the negative headings
-    psychometric = [unique_heading' sum(choices{cc}(:),1)'/N_trial];
+    psychometric = [unique_heading' sum(choices{cc},1)'/N_trial];
     fake_psy = flipud(psychometric(unique_heading>0,:));
     fake_psy(:,1) = -fake_psy(:,1);
     fake_psy(:,2) = 1-fake_psy(:,2);
