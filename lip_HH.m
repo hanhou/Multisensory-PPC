@@ -51,12 +51,12 @@ prefs_lip = linspace(-180,180,N_lip);
 % Decision bound
 if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
 f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = 70*[1 1 1]; % bound height, for different conditions
+decis_thres = 60*[1 1 1]; % bound height, for different conditions
 att_gain_stim_after_hit_bound = [0 0 0];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % === Times ===
-dt = 2e-3; % Size of time bin in seconds
+dt = 4e-3; % Size of time bin in seconds
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
 motion_duration = 1.5; % in s
@@ -72,10 +72,10 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % === Stimuli ===
-% unique_heading = [0 1 2 4 8];
-% unique_condition = [1 2 3];
 unique_heading = [0 1 2 4 8];
 unique_condition = [1 2 3];
+% unique_heading = [0  4 8];
+% unique_condition = [3];
 N_trial = 20; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -134,7 +134,7 @@ t_motion(end) = [];
 vel(end) = [];
 
 % Gains
-gain_vel_vis = 5; % (m/s)^-1
+gain_vel_vis = 7; % (m/s)^-1
 gain_acc_vest = 2; % (m^2/s)^-1
 
 if if_debug
@@ -149,7 +149,7 @@ end
 % === Network configuration ===
 
 % -- Time constant for integration
-time_const_int = 3000e-3; % in s
+time_const_int = 1000e-3; % in s
 time_const_lip = 100e-3; % in s
 
 % -- Visual to INTEGRATOR
@@ -163,7 +163,7 @@ K_int_vest = 5;
 dc_w_int_vest = -0;
 
 % --- Targets to LIP ----
-g_w_lip_targ= 10;
+g_w_lip_targ= 20;
 K_lip_targ= 20;
 att_gain_targ = 1; % Drop in attention to visual target once motion stimulus appears.
 
@@ -183,7 +183,7 @@ threshold_int = 0.0;
 
 % --- INTEGRATOR to the real LIP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_int = 20;
+g_w_lip_int = 30;
 K_lip_int = 5;
 dc_w_lip_int = 0;
 
@@ -193,9 +193,9 @@ K_lip_int_I = 2;
 
 % --- LIP recurrent connection
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_lip = 15;
+g_w_lip_lip = 8;
 K_lip_lip = 20;
-dc_w_lip_lip = -7;
+dc_w_lip_lip = -5;
 
 amp_I_lip = 0;  % Mexico hat shape
 K_lip_I = 2;
@@ -499,8 +499,8 @@ for cc = 1:length(unique_condition)
                     rate_int{mm}(:,k+1,tt,hh,cc) = bias_int + (1-dt/time_const_int)*rate_int{mm}(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
                         + 1/time_const_int * (...
                               w_int_int * spikes_int{mm}(:,k,tt,hh,cc)... %  INTEGRATOR recurrent
-                            + att_gain_stim * w_int_vis * spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
-                            + att_gain_stim * w_int_vest * spikes_vest{mm}(:,k,tt,hh,cc)...     % Vestibular input
+                            + w_int_vis * spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
+                            + w_int_vest * spikes_vest{mm}(:,k,tt,hh,cc)...     % Vestibular input
                         ... % + att_gain_targ * w_int_targ * spikes_target{mm}(:,k,tt,hh,cc)...  % No longer here. HH20170317
                         );            
                     
@@ -509,7 +509,7 @@ for cc = 1:length(unique_condition)
                         + 1/time_const_lip * (...
                               w_lip_lip * spikes_lip{mm}(:,k,tt,hh,cc)...  %  LIP recurrent
                             + att_gain_targ * w_lip_targ * spikes_target{mm}(:,k,tt,hh,cc)...  % Moved here. HH20170317
-                            + w_lip_int * spikes_int{mm}(:,k,tt,hh,cc)... %  INTEGRATOR->LIP
+                            + att_gain_stim * w_lip_int * spikes_int{mm}(:,k,tt,hh,cc)... %  INTEGRATOR->LIP
                         );            
                     
                     
