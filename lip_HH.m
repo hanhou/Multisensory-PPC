@@ -74,8 +74,8 @@ end
 % === Stimuli ===
 % unique_heading = [0 1 2 4 8];
 % unique_condition = [1 2 3];
-unique_heading = [0 1 2 4 8];
-unique_condition = [1 2 3];
+unique_heading = [0 8];
+unique_condition = [3];
 N_trial = 20; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -163,8 +163,8 @@ K_int_vest = 5;
 dc_w_int_vest = -0;
 
 % --- Targets to LIP ----
-g_w_lip_targ= 10;
-K_lip_targ= 20;
+g_w_lip_targ= 30;
+K_lip_targ= 5;
 att_gain_targ = 1; % Drop in attention to visual target once motion stimulus appears.
 
 % --- Recurrent connectivity in INTEGRATOR
@@ -183,7 +183,7 @@ threshold_int = 0.0;
 
 % --- INTEGRATOR to the real LIP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_int = 20;
+g_w_lip_int = 25;
 K_lip_int = 5;
 dc_w_lip_int = 0;
 
@@ -618,32 +618,40 @@ rate_real_lip_aver = nanmean(spikes_lip{1}(:,:,:,to_plot_heading,to_plot_cond),3
 rate_real_targ_aver = nanmean(spikes_target{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
 
 
-%{
+% %{
 %%  ====== Animation ======
 figure(1001); clf
 
-for ttt = 1:length(ts)
-    % LIP layer
-    subplot(3,1,1);
-    plot(prefs_lip,rate_expected_lip_aver(:,ttt),'r');  hold on;
-    plot(prefs_lip,rate_real_lip_aver(:,ttt),'k');  hold off;
-    set(gca,'xtick',min(prefs_lip:90:max(prefs_lip)));
-    xlim([min(prefs_lip) max(prefs_lip)]);  ylim([-20 50]);
-    title(ttt*dt*1000);
+for ttt = 1:10:length(ts)
 
     % INTEGRATOR layer
-    subplot(3,1,2);
-    plot(prefs_int,rate_expected_int_aver(:,ttt),'r');  hold on;
-    plot(prefs_int,rate_real_int_aver(:,ttt),'k');  hold off;
-    set(gca,'xtick',min(prefs_int):90:max(prefs_int));
-    xlim([min(prefs_int) max(prefs_int)]);  ylim([-20 50]);
-    
+    subplot(2,2,1);
+    plot(prefs_int,rate_expected_int_aver(:,ttt)); hold on;
+    plot(prefs_int,rate_real_int_aver(:,ttt),'r');  hold off;
+    axis(gca,[min(prefs_int) max(prefs_int) min(rate_expected_int_aver(:)) max(rate_real_int_aver(:))]);
+    title(sprintf('Integrator, heading = %g, cond = %g, aver %g trials',unique_heading(to_plot_heading),unique_condition(to_plot_cond),N_trial));
+
+    % LIP layer
+    subplot(2,2,2);
+    plot(prefs_int,rate_expected_lip_aver(:,ttt)); hold on;
+    plot(prefs_int,rate_real_lip_aver(:,ttt),'r');  hold off;
+    axis(gca,[min(prefs_int) max(prefs_int) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))]);
+    title(sprintf('LIP, t = %g',ttt*dt*1000));
+
     % Visual layer
-    subplot(3,1,3);
-    plot(prefs_vis,rate_real_vis_aver(:,ttt),'k');  hold off;
-    set(gca,'xtick',min(prefs_vis):90:max(prefs_vis));
-    xlim([min(prefs_vis) max(prefs_vis)]);  ylim([-20 50]);
+    subplot(2,2,3);
+    plot(prefs_int,aux_proba_vis(:,ttt)/dt); hold on;
+    plot(prefs_int,rate_real_vis_aver(:,ttt),'r'); hold off; 
+    axis(gca,[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(aux_proba_vis(:)/dt)]);
+    title('Visual');
     
+    % Target layer
+    subplot(2,2,4);
+    plot(prefs_int,proba_target_tuning/dt); hold on; 
+    plot(prefs_int,rate_real_targ_aver(:,ttt),'r'); hold off; 
+    axis(gca,[min(prefs_int) max(prefs_int) min(proba_target_tuning(:)/dt) max(proba_target_tuning(:)/dt)]);
+    title('Target');
+
     drawnow;
 end
 
