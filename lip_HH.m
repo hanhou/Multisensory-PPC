@@ -25,10 +25,10 @@ if_test_set = 0;
 
 % === Sizes ===
 % Input layers
-N_vis = 100; % Visual motion signal
+N_vis = 200; % Visual motion signal
 prefs_vis = linspace(-180,180,N_vis);
 
-N_vest = 100; % Vestibular motion signal
+N_vest = 200; % Vestibular motion signal
 prefs_vest = linspace(-180,180,N_vis);
 
 N_targets = 2; % Target input
@@ -37,11 +37,11 @@ N_targets = 2; % Target input
 % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
 % which has a short time constant, keeps receiving target input but does not integrate it.
 % For most part of the code, I just rename the old "_lip" stuff to "_int"
-N_int = 100;
+N_int = 200;
 prefs_int = linspace(-180,180,N_int);
 
 % Output layers (Real LIP layer)
-N_lip = 100;
+N_lip = 200;
 prefs_lip = linspace(-180,180,N_lip);
 
 [~,right_targ_ind] = min(abs(prefs_lip - 90)); % Left and right for the heading task
@@ -50,13 +50,14 @@ prefs_lip = linspace(-180,180,N_lip);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Decision bound
 if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
-f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = 10*[1 1 1]; % bound height, for different conditions
+f_bound = @(x) max(x);
+%  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
+decis_thres = 100*[1 1 1]; % bound height, for different conditions
 att_gain_stim_after_hit_bound = [0 0 0];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % === Times ===
-dt = 4e-3; % Size of time bin in seconds
+dt = 2e-3; % Size of time bin in seconds
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
 motion_duration = 1.5; % in s
@@ -72,11 +73,11 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % === Stimuli ===
-% unique_heading = [0 1 2 4 8];
-% unique_condition = [1 2 3];
 unique_heading = [0 1 2 4 8];
 unique_condition = [1 2 3];
-N_trial = 10; % For each condition
+% unique_heading = [0 8];
+% unique_condition = [3];
+N_trial = 50; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -150,7 +151,7 @@ end
 
 % -- Time constant for integration
 time_const_int = 10000e-3; % in s
-time_const_lip = 200e-3; % in s
+time_const_lip = 100e-3; % in s
 
 % -- Visual to INTEGRATOR
 g_w_int_vis = 25;
@@ -164,8 +165,8 @@ dc_w_int_vest = -0;
 
 % --- Targets to LIP ----
 g_w_lip_targ= 10;
-K_lip_targ= 20;
-att_gain_targ = 1; % Drop in attention to visual target once motion stimulus appears.
+K_lip_targ= 3;
+att_gain_targ = 0.5; % Drop in attention to visual target once motion stimulus appears.
 
 % % --- Recurrent connectivity in INTEGRATOR
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -193,7 +194,7 @@ K_lip_int_I = 2;
 
 % --- LIP recurrent connection
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_lip = 15;
+g_w_lip_lip = 10;
 K_lip_lip = 20;
 dc_w_lip_lip = -7;
 
@@ -243,7 +244,7 @@ spikes_count_vis = cell(2,1); spikes_count_vest = cell(2,1); proba_count_int = c
 for m = 1:if_test_set+1 % Train and Test
     
     % Raw data
-    spikes_target{m} = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+    spikes_target{m} = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
     spikes_vis{m} = zeros(N_vis,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
     spikes_vest{m} = zeros(N_vest,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
     
@@ -285,22 +286,22 @@ for nn=1:N_int
         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
         + dc_w_int_vest/N_vest;   % Offset
     
-    % -- Targ->LIP --
-    w_lip_targ(nn,:) = g_w_lip_targ/N_int *(exp(K_lip_targ*(cos((prefs_int-prefs_int(nn))/360 *2*pi)-1)));  %  Target input
-    
     % -- Int->Int --
     %     w_int_int(nn,:) = g_w_int_int/N_int*...   %  Integrator recurrent
     %         ((exp(K_int_int*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1)))-...
     %         amp_I_int*(exp(K_int_I*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1))))...
     %         + dc_w_int_int/N_int;
-    
 end
 
 for nn=1:N_lip
+    
+    % -- Targ->LIP --
+    w_lip_targ(nn,:) = g_w_lip_targ/N_int *(exp(K_lip_targ*(cos((prefs_lip-prefs_lip(nn))/360 *2*pi)-1)));  %  Target input
+
     % -- Int->LIP --
     w_lip_int(nn,:) = g_w_lip_int/N_int*...
-        ((exp(K_lip_int*(cos((prefs_lip-prefs_int(nn))/360*2*pi)-1)))-...
-        amp_I_lip_int*(exp(K_lip_int_I*(cos((prefs_lip-prefs_int(nn))/360*2*pi)-1))))...
+        ((exp(K_lip_int*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1)))-...
+        amp_I_lip_int*(exp(K_lip_int_I*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1))))...
         + dc_w_lip_int/N_int;
     
     % -- LIP->LIP --
@@ -410,10 +411,10 @@ for cc = 1:length(unique_condition)
         % pos_targ = stim_this + [0:360/N_targets:359.9];
         pos_targ = [-90 90]; % Always these two for fine discrimination task. HH2017
         
-        proba_target_tuning = zeros(N_int,1);
+        proba_target_tuning = zeros(N_lip,1);
         for nn=1:N_targets
             proba_target_tuning = proba_target_tuning + ((max_rate_target-b_target)*...
-                exp(K_target*(cos((prefs_int'-pos_targ(nn))/360*2*pi)-1))+b_target)*dt;
+                exp(K_target*(cos((prefs_lip'-pos_targ(nn))/360*2*pi)-1))+b_target)*dt;
         end
         proba_target_tuning = proba_target_tuning/(slope_norm_target*(N_targets/2)+dc_norm_target);   %  Divisive normalization
         
@@ -438,7 +439,7 @@ for cc = 1:length(unique_condition)
                 %                 % so we deliberately ignore INTEGRATOR dynamics during that period (although a little bit weird)!!
                 
                 aux_proba_target = proba_target_tuning*ones(1,trial_dur_total_in_bins); % Expand along the time axis
-                spikes_target{mm}(:,:,tt,hh,cc) = rand(N_int,trial_dur_total_in_bins)<(aux_proba_target);
+                spikes_target{mm}(:,:,tt,hh,cc) = rand(N_lip,trial_dur_total_in_bins)<(aux_proba_target);
                 
                 % -- Visual input spike train --
                 % The stim_on_time controls when motion information comes in.
@@ -546,7 +547,7 @@ for cc = 1:length(unique_condition)
                     %}
                     
                     if mm == 1 % Only apply to train set
-                        decision_ac(:,k+1) = rate_int{mm}(:,k+1,tt,hh,cc);
+                        decision_ac(:,k+1) = rate_lip{mm}(:,k+1,tt,hh,cc);
                         %          decision_ac(:,k+1) = (1-delta_t/time_const_out)*decision_ac(:,k+1)+...
                         %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out{1}(:,k));
                         
@@ -638,23 +639,23 @@ for ttt = 1:10:length(ts)
 
     % LIP layer
     subplot(2,2,2);
-    plot(prefs_int,rate_expected_lip_aver(:,ttt)); hold on;
-    plot(prefs_int,rate_real_lip_aver(:,ttt),'r');  hold off;
-    axis(gca,[min(prefs_int) max(prefs_int) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))]);
+    plot(prefs_lip,rate_expected_lip_aver(:,ttt)); hold on;
+    plot(prefs_lip,rate_real_lip_aver(:,ttt),'r');  hold off;
+    axis(gca,[min(prefs_lip) max(prefs_lip) min(rate_expected_lip_aver(:)) max(rate_real_lip_aver(:))]);
     title(sprintf('LIP, t = %g',ttt*dt*1000));
 
     % Visual layer
     subplot(2,2,3);
     plot(prefs_int,aux_proba_vis(:,ttt)/dt); hold on;
     plot(prefs_int,rate_real_vis_aver(:,ttt),'r'); hold off; 
-    axis(gca,[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(aux_proba_vis(:)/dt)]);
+    axis(gca,[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(rate_real_vis_aver(:))]);
     title('Visual');
     
     % Target layer
     subplot(2,2,4);
-    plot(prefs_int,proba_target_tuning/dt); hold on; 
-    plot(prefs_int,rate_real_targ_aver(:,ttt),'r'); hold off; 
-    axis(gca,[min(prefs_int) max(prefs_int) min(proba_target_tuning(:)/dt) max(proba_target_tuning(:)/dt)]);
+    plot(prefs_lip,proba_target_tuning/dt); hold on; 
+    plot(prefs_lip,rate_real_targ_aver(:,ttt),'r'); hold off; 
+    axis(gca,[min(prefs_lip) max(prefs_lip) min(proba_target_tuning(:)/dt) max(rate_real_targ_aver(:))]);
     title('Target');
 
     drawnow;
