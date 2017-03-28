@@ -623,7 +623,7 @@ rate_real_int_aver = nanmean(spikes_int{1}(:,:,:,to_plot_heading,to_plot_cond),3
 rate_real_lip_aver = nanmean(spikes_lip{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
 rate_real_targ_aver = nanmean(spikes_target{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
 
-%{
+% %{
 %%  ====== Animation ======
 figure(1001); clf
 
@@ -631,30 +631,30 @@ for ttt = 1:10:length(ts)
 
     % INTEGRATOR layer
     subplot(2,2,1);
-    h=plotyy(prefs_int,rate_expected_int_aver(:,ttt),prefs_int,rate_real_int_aver(:,ttt)); 
-    axis(h(1),[min(prefs_int) max(prefs_int) min(rate_expected_int_aver(:)) max(rate_expected_int_aver(:))]);
-    axis(h(2),[min(prefs_int) max(prefs_int) min(rate_real_int_aver(:)) max(rate_real_int_aver(:))]);
-    title('Integrator');
+    plot(prefs_int,rate_expected_int_aver(:,ttt)); hold on;
+    plot(prefs_int,rate_real_int_aver(:,ttt),'r');  hold off;
+    axis(gca,[min(prefs_int) max(prefs_int) min(rate_expected_int_aver(:)) max(rate_real_int_aver(:))]);
+    title(sprintf('Integrator, heading = %g, cond = %g, aver %g trials',unique_heading(to_plot_heading),unique_condition(to_plot_cond),N_trial));
 
     % LIP layer
     subplot(2,2,2);
-    h=plotyy(prefs_int,rate_expected_lip_aver(:,ttt),prefs_int,rate_real_lip_aver(:,ttt)); 
-    axis(h(1),[min(prefs_int) max(prefs_int) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))]);
-    axis(h(2),[min(prefs_int) max(prefs_int) min(rate_real_lip_aver(:)) max(rate_real_lip_aver(:))]);
+    plot(prefs_int,rate_expected_lip_aver(:,ttt)); hold on;
+    plot(prefs_int,rate_real_lip_aver(:,ttt),'r');  hold off;
+    axis(gca,[min(prefs_int) max(prefs_int) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))]);
     title(sprintf('LIP, t = %g',ttt*dt*1000));
 
     % Visual layer
     subplot(2,2,3);
-    h=plotyy(prefs_int,aux_proba_vis(:,ttt)/dt,prefs_int,rate_real_vis_aver(:,ttt)); 
-    axis(h(1),[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(aux_proba_vis(:)/dt)]);
-    axis(h(2),[min(prefs_int) max(prefs_int) min(rate_real_vis_aver(:)) max(rate_real_vis_aver(:))]);
+    plot(prefs_int,aux_proba_vis(:,ttt)/dt); hold on;
+    plot(prefs_int,rate_real_vis_aver(:,ttt),'r'); hold off; 
+    axis(gca,[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(aux_proba_vis(:)/dt)]);
     title('Visual');
     
     % Target layer
     subplot(2,2,4);
-    h=plotyy(prefs_int,proba_target_tuning/dt,prefs_int,rate_real_targ_aver(:,ttt)); 
-    axis(h(1),[min(prefs_int) max(prefs_int) min(proba_target_tuning(:)/dt) max(proba_target_tuning(:)/dt)]);
-    axis(h(2),[min(prefs_int) max(prefs_int) min(rate_real_targ_aver(:)) max(rate_real_targ_aver(:))]);
+    plot(prefs_int,proba_target_tuning/dt); hold on; 
+    plot(prefs_int,rate_real_targ_aver(:,ttt),'r'); hold off; 
+    axis(gca,[min(prefs_int) max(prefs_int) min(proba_target_tuning(:)/dt) max(proba_target_tuning(:)/dt)]);
     title('Target');
 
     drawnow;
