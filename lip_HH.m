@@ -52,7 +52,7 @@ prefs_lip = linspace(-180,180,N_lip);
 if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
 f_bound = @(x) max(x);
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = 100*[1 1 1]; % bound height, for different conditions
+decis_thres = 44*[1 1 1.2]; % bound height, for different conditions
 att_gain_stim_after_hit_bound = [0 0 0];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -77,7 +77,7 @@ unique_heading = [0 1 2 4 8];
 unique_condition = [1 2 3];
 % unique_heading = [0 8];
 % unique_condition = [3];
-N_trial = 50; % For each condition
+N_trial = 40; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -135,8 +135,9 @@ t_motion(end) = [];
 vel(end) = [];
 
 % Gains
-gain_vel_vis = 5; % (m/s)^-1
-gain_acc_vest = 2; % (m^2/s)^-1
+% Maybe should be set such that gain_vis:gain_vest = (integral of abs(a))/(integral of v)  
+gain_vel_vis = 7; % (m/s)^-1
+gain_acc_vest = 2; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
 
 if if_debug
     figure(111);clf
@@ -154,19 +155,25 @@ time_const_int = 10000e-3; % in s
 time_const_lip = 100e-3; % in s
 
 % -- Visual to INTEGRATOR
-g_w_int_vis = 25;
-K_int_vis = 5;
+g_w_int_vis = 7;
 dc_w_int_vis = -0;
 
+K_int_vis = 5; % Larger, narrower
+K_int_vis_along_vis = 0.1; % Larger, wider
+gain_func_along_vis = @(x) (1./(1+exp(-(abs(90-abs(90-abs(x))))/K_int_vis_along_vis))-0.5)*2;
+
 % -- Vestibular to INTEGRATOR
-g_w_int_vest = 25;
-K_int_vest = 5;
-dc_w_int_vest = -0;
+g_w_int_vest = g_w_int_vis;
+dc_w_int_vest = dc_w_int_vis;
+
+K_int_vest = K_int_vis;
+K_int_vest_along_vest = K_int_vis_along_vis;
+gain_func_along_vest = @(x) (1./(1+exp(-(abs(90-abs(90-abs(x))))/K_int_vest_along_vest))-0.5)*2;
 
 % --- Targets to LIP ----
 g_w_lip_targ= 10;
-K_lip_targ= 3;
-att_gain_targ = 0.5; % Drop in attention to visual target once motion stimulus appears.
+K_lip_targ= 5;
+att_gain_targ = 0.7; % Drop in attention to visual target once motion stimulus appears.
 
 % % --- Recurrent connectivity in INTEGRATOR
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -184,9 +191,9 @@ threshold_int = 0.0;
 
 % --- INTEGRATOR to the real LIP
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_int = 10;
+g_w_lip_int = 12;
 K_lip_int = 5;
-dc_w_lip_int = 0;
+dc_w_lip_int = -3;
 
 amp_I_lip_int = 0;  % Mexico hat shape
 K_lip_int_I = 2;
@@ -196,7 +203,7 @@ K_lip_int_I = 2;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 g_w_lip_lip = 10;
 K_lip_lip = 20;
-dc_w_lip_lip = -7;
+dc_w_lip_lip = -8;
 
 amp_I_lip = 0;  % Mexico hat shape
 K_lip_I = 2;
@@ -276,14 +283,23 @@ w_int_int = zeros(N_int,N_int);
 w_lip_int = zeros(N_lip,N_int);
 w_lip_lip = zeros(N_lip,N_lip);
 
+
 for nn=1:N_int
     
     % -- VIS->Int, Vest->Int --
+%     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+%         .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+%         + dc_w_int_vis/N_vis;   % Offset
+%     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+%         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+%         + dc_w_int_vest/N_vest;   % Offset
+    
+    % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-        .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+        .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
         + dc_w_int_vis/N_vis;   % Offset
     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-        .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+        .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
         + dc_w_int_vest/N_vest;   % Offset
     
     % -- Int->Int --
@@ -319,14 +335,14 @@ if if_debug
     imagesc(prefs_lip,prefs_lip,w_lip_lip'); colorbar; axis  xy; title('LIP->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{lip}'); 
     set(gca,'xtick',-180:90:180); 
-    hold on; plot(prefs_lip,w_lip_lip(:,end/2)/max(w_lip_lip(:,end/2))*100,'linew',3,'color','c');
+    hold on; plot(prefs_lip,w_lip_lip(:,end/2)/range(w_lip_lip(:,end/2))*100,'linew',3,'color','c');
     plot(xlim,[0 0],'--c');
     
     subplot(4,3,4);
     imagesc(prefs_lip,prefs_int,w_lip_int'); colorbar; axis  xy; title('Int->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{int}');
     set(gca,'xtick',-180:90:180);
-    hold on; plot(prefs_lip,w_lip_int(:,end/2)/max(w_lip_int(:,end/2))*100,'linew',3,'color','c');
+    hold on; plot(prefs_lip,w_lip_int(:,end/2)/range(w_lip_int(:,end/2))*100,'linew',3,'color','c');
     plot(xlim,[0 0],'--c');
     
     subplot(4,3,7);
@@ -334,7 +350,7 @@ if if_debug
     imagesc(prefs_int,prefs_int,w_int_int');    colorbar; axis xy; title('Int->Int');
     xlabel('\theta_{int}'); ylabel('\theta_{int}');
     set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
-    hold on; plot(prefs_int,w_int_int(:,end/2)/max(w_int_int(:,end/2))*100,'linew',3,'color','c');
+    hold on; plot(prefs_int,w_int_int(:,end/2)/range(w_int_int(:,end/2))*100,'linew',3,'color','c');
     plot(xlim,[0 0],'--c');
     
     %     subplot(4,3,7);
@@ -344,10 +360,16 @@ if if_debug
     
     subplot(4,3,10);
     imagesc(prefs_int,prefs_vis,w_int_vis'); colorbar; axis  xy; title('Vis/Vest->Int');
-    xlabel('\theta_{int}'); ylabel('\theta_{vis/vest}'); ylim([-20 20]);
+    xlabel('\theta_{int}'); ylim([-20 20]);
     set(gca,'xtick',-180:90:180);
     hold on; plot(prefs_int,w_int_vis(:,end/2)/max(w_int_vis(:,end/2))*20,'linew',3,'color','c');
     plot(xlim,[0 0],'--c');
+    
+    temp_ax = axes('Pos',[0.05 0.124 0.053 0.134]);
+    plot(prefs_vis,gain_func_along_vis(prefs_vis)); hold on;
+    plot([-20 -20],ylim,'r-'); plot([20 20],ylim,'r-');
+    view(270,90);     set(gca,'xtick',-180:90:180);
+    xlabel('\theta_{vis/vest}');
     
     colormap hot;
 end
@@ -448,12 +470,14 @@ for cc = 1:length(unique_condition)
                 
                 % Temporal dynamics added. HH2017
                 aux_proba_vis = proba_vis*[zeros(1,stim_on_time_in_bins) vel*gain_vel_vis]...
-                    + w_cov_vis*randn(N_vis,trial_dur_total_in_bins);
+                    + w_cov_vis*randn(N_vis,trial_dur_total_in_bins) ...
+                    .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel))],N_vis,1);
                 
                 % -- Vestibular ---
                 % With the temporal gain of abs(acc)
                 aux_proba_vest = proba_vest*[zeros(1,stim_on_time_in_bins) abs(acc)*gain_acc_vest]...
-                    + w_cov_vest*randn(N_vest,trial_dur_total_in_bins);
+                    + w_cov_vest*randn(N_vest,trial_dur_total_in_bins) ...
+                    .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel))],N_vis,1);
                 
                 % -- Stimulus condition selection --
                 if cond_this == 1
@@ -552,7 +576,7 @@ for cc = 1:length(unique_condition)
                         %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out{1}(:,k));
                         
                         % -- Termination --
-                        if if_bounded && att_gain_stim == 1 && (f_bound(decision_ac(:,k+1)) > decis_thres(unique_condition(cc)))
+                        if if_bounded && k*dt>stim_on_time && att_gain_stim == 1 && (f_bound(decision_ac(:,k+1)) > decis_thres(unique_condition(cc)))
                             % Set the attention for motion stimuli to zero
                             att_gain_stim = att_gain_stim_after_hit_bound(unique_condition(cc));
                             RT(tt,hh,cc) = (k-stim_on_time_in_bins)*dt;
@@ -634,28 +658,28 @@ for ttt = 1:10:length(ts)
     subplot(2,2,1);
     plot(prefs_int,rate_expected_int_aver(:,ttt)); hold on;
     plot(prefs_int,rate_real_int_aver(:,ttt),'r');  hold off;
-    axis(gca,[min(prefs_int) max(prefs_int) min(rate_expected_int_aver(:)) max(rate_real_int_aver(:))]);
+    axis(gca,[min(prefs_int) max(prefs_int) min(rate_expected_int_aver(:)) max(rate_expected_int_aver(:))*2]);
     title(sprintf('Integrator, heading = %g, cond = %g, aver %g trials',unique_heading(to_plot_heading),unique_condition(to_plot_cond),N_trial));
 
     % LIP layer
     subplot(2,2,2);
     plot(prefs_lip,rate_expected_lip_aver(:,ttt)); hold on;
     plot(prefs_lip,rate_real_lip_aver(:,ttt),'r');  hold off;
-    axis(gca,[min(prefs_lip) max(prefs_lip) min(rate_expected_lip_aver(:)) max(rate_real_lip_aver(:))]);
+    axis(gca,[min(prefs_lip) max(prefs_lip) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))*2]);
     title(sprintf('LIP, t = %g',ttt*dt*1000));
 
     % Visual layer
     subplot(2,2,3);
     plot(prefs_int,aux_proba_vis(:,ttt)/dt); hold on;
     plot(prefs_int,rate_real_vis_aver(:,ttt),'r'); hold off; 
-    axis(gca,[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(rate_real_vis_aver(:))]);
+    axis(gca,[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(aux_proba_vis(:)/dt)*2]);
     title('Visual');
     
     % Target layer
     subplot(2,2,4);
     plot(prefs_lip,proba_target_tuning/dt); hold on; 
     plot(prefs_lip,rate_real_targ_aver(:,ttt),'r'); hold off; 
-    axis(gca,[min(prefs_lip) max(prefs_lip) min(proba_target_tuning(:)/dt) max(rate_real_targ_aver(:))]);
+    axis(gca,[min(prefs_lip) max(prefs_lip) min(proba_target_tuning(:)/dt) max(proba_target_tuning(:)/dt)*2]);
     title('Target');
 
     drawnow;
@@ -705,10 +729,10 @@ for cc = 1:length(unique_condition)
     plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
     axis tight;
     
-    %     if if_bounded
-    %         plot(xlim,[decis_thres decis_thres],'k--');
-    %         ylim([min(ylim),decis_thres*1.1]);
-    %     end
+    if if_bounded
+        plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
+%         ylim([min(ylim),decis_thres(k)*1.1]);
+    end
     
     title(sprintf('rate\\_lip, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
     
@@ -722,10 +746,10 @@ for cc = 1:length(unique_condition)
     plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
     axis tight;
     
-    %     if if_bounded
-    %         plot(xlim,[decis_thres decis_thres],'k--');
-    %         ylim([min(ylim),decis_thres*1.1]);
-    %     end
+%     if if_bounded
+%         plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
+% %         ylim([min(ylim),decis_thres*1.1]);
+%     end
     
     title(sprintf('rate\\_int, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
     
@@ -829,10 +853,10 @@ for hh = 1:length(unique_heading)
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
     axis tight;
     
-    %     if if_bounded
-    %         plot(xlim,[decis_thres decis_thres],'k--');
-    %         ylim([min(ylim),decis_thres*1.1]);
-    %     end
+    if if_bounded
+        plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
+%         ylim([min(ylim),decis_thres*1.1]);
+    end
     
     y_min = min(y_min,min(ylim));
     y_max = max(y_max,max(ylim));
