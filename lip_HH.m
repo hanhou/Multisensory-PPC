@@ -52,7 +52,7 @@ prefs_lip = linspace(-180,180,N_lip);
 if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
 f_bound = @(x) max(x);
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = 44*[1 1 1.2]; % bound height, for different conditions
+decis_thres = 33*[1 1 1]; % bound height, for different conditions
 att_gain_stim_after_hit_bound = [0 0 0];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -77,7 +77,7 @@ unique_heading = [0 1 2 4 8];
 unique_condition = [1 2 3];
 % unique_heading = [0 8];
 % unique_condition = [3];
-N_trial = 40; % For each condition
+N_trial = 160; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -193,7 +193,7 @@ threshold_int = 0.0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 g_w_lip_int = 12;
 K_lip_int = 5;
-dc_w_lip_int = -3;
+dc_w_lip_int = -4.2;
 
 amp_I_lip_int = 0;  % Mexico hat shape
 K_lip_int_I = 2;
