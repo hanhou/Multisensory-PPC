@@ -77,7 +77,7 @@ unique_heading = [0 1 2 4 8];
 unique_condition = [1 2 3];
 % unique_heading = [0 8];
 % unique_condition = [3];
-N_trial = 160; % For each condition
+N_trial = 10; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -135,7 +135,7 @@ t_motion(end) = [];
 vel(end) = [];
 
 % Gains
-% Maybe should be set such that gain_vis:gain_vest = (integral of abs(a))/(integral of v)  
+% Maybe should be set such that gain_vis:gain_vest = (integral of abs(a))/(integral of v)
 gain_vel_vis = 7; % (m/s)^-1
 gain_acc_vest = 2; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
 
@@ -240,36 +240,45 @@ fisher_N_window = 4;
 aux1_rate_int = zeros(N_int,trial_dur_total_in_bins+2);
 aux2_rate_int = zeros(N_int,trial_dur_total_in_bins+2);
 
-decision_ac = zeros(N_int,trial_dur_total_in_bins+2);
+% spikes_target = cell(2,1); spikes_vis = cell(2,1); spikes_vest = cell(2,1);
+% rate_int = cell(2,1); spikes_int = cell(2,1);
+% rate_lip = cell(2,1); spikes_lip = cell(2,1);
 
-spikes_target = cell(2,1); spikes_vis = cell(2,1); spikes_vest = cell(2,1);
-rate_int = cell(2,1); spikes_int = cell(2,1);
-rate_lip = cell(2,1); spikes_lip = cell(2,1);
+% spikes_count_vis = cell(2,1); spikes_count_vest = cell(2,1); proba_count_int = cell(2,1); spikes_count_int = cell(2,1);
 
-spikes_count_vis = cell(2,1); spikes_count_vest = cell(2,1); proba_count_int = cell(2,1); spikes_count_int = cell(2,1);
+% for m = 1:if_test_set+1 % Train and Test
 
-for m = 1:if_test_set+1 % Train and Test
-    
-    % Raw data
-    spikes_target{m} = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-    spikes_vis{m} = zeros(N_vis,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-    spikes_vest{m} = zeros(N_vest,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-    
-    rate_int{m} = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-    spikes_int{m} = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-    rate_lip{m} = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-    spikes_lip{m} = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-    
-    % Spike count in sliding windows for Fisher information
-    spikes_count_vis{m} = nan(N_vis, fisher_N_window, N_trial,length(unique_heading),length(unique_condition));
-    spikes_count_vest{m} = nan(N_vest, fisher_N_window, N_trial,length(unique_heading),length(unique_condition));
-    proba_count_int{m} = nan(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_condition));
-    spikes_count_int{m} = nan(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_condition));
-    if shuffle_flag==1
-        spikes_count_int_shuff{m} = zeros(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_condition));
-    end
-    
-end
+%     % Raw data
+%     spikes_target = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+%     spikes_vis = zeros(N_vis,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+%     spikes_vest = zeros(N_vest,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+%
+%     rate_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+%     spikes_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+%     rate_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+%     spikes_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+
+% Spike count in sliding windows for Fisher information
+%     spikes_count_vis = nan(N_vis, fisher_N_window, N_trial,length(unique_heading),length(unique_condition));
+%     spikes_count_vest = nan(N_vest, fisher_N_window, N_trial,length(unique_heading),length(unique_condition));
+%     proba_count_int = nan(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_condition));
+%     spikes_count_int = nan(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_condition));
+%     if shuffle_flag==1
+%         spikes_count_int_shuff = zeros(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_condition));
+%     end
+
+% end
+
+% Raw data
+spikes_target = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+spikes_vis = zeros(N_vis,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+spikes_vest = zeros(N_vest,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+
+rate_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+spikes_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+rate_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+spikes_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+
 
 % Output variables
 RT = (trial_dur_total-stim_on_time) * ones(N_trial,length(unique_heading),length(unique_condition));
@@ -287,12 +296,12 @@ w_lip_lip = zeros(N_lip,N_lip);
 for nn=1:N_int
     
     % -- VIS->Int, Vest->Int --
-%     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-%         .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-%         + dc_w_int_vis/N_vis;   % Offset
-%     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-%         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-%         + dc_w_int_vest/N_vest;   % Offset
+    %     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+    %         .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+    %         + dc_w_int_vis/N_vis;   % Offset
+    %     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+    %         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+    %         + dc_w_int_vest/N_vest;   % Offset
     
     % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
@@ -313,7 +322,7 @@ for nn=1:N_lip
     
     % -- Targ->LIP --
     w_lip_targ(nn,:) = g_w_lip_targ/N_int *(exp(K_lip_targ*(cos((prefs_lip-prefs_lip(nn))/360 *2*pi)-1)));  %  Target input
-
+    
     % -- Int->LIP --
     w_lip_int(nn,:) = g_w_lip_int/N_int*...
         ((exp(K_lip_int*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1)))-...
@@ -333,8 +342,8 @@ if if_debug
     
     subplot(4,3,1);
     imagesc(prefs_lip,prefs_lip,w_lip_lip'); colorbar; axis  xy; title('LIP->LIP');
-    xlabel('\theta_{lip}'); ylabel('\theta_{lip}'); 
-    set(gca,'xtick',-180:90:180); 
+    xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
+    set(gca,'xtick',-180:90:180);
     hold on; plot(prefs_lip,w_lip_lip(:,end/2)/range(w_lip_lip(:,end/2))*100,'linew',3,'color','c');
     plot(xlim,[0 0],'--c');
     
@@ -441,194 +450,117 @@ for cc = 1:length(unique_condition)
         proba_target_tuning = proba_target_tuning/(slope_norm_target*(N_targets/2)+dc_norm_target);   %  Divisive normalization
         
         
-        % === Begin trials ===
-        for mm = 1:if_test_set+1 % Train and test sets
-            for tt = 1:N_trial % For each trial
-                
-                if round(tt/50)==tt/50
-                    fprintf('%d  ',tt);
-                end
-                
-                % == Generate input spike trains ==
-                
-                %                 % -- Target input spike train --
-                %                 % Note that trial_dur_total now includes the pre-trial time.
-                %                 % There is no need (actually erroneous?) to separate pre-trial and trial.
-                %                 % Because in this case, the INTEGRATOR dynamics are missing during pre-trial,
-                %                 % and the MT's noise term was also missing.
-                %
-                %                 % Ohh, I got it. We don't want to accumulate target information during pre-trial,
-                %                 % so we deliberately ignore INTEGRATOR dynamics during that period (although a little bit weird)!!
-                
-                aux_proba_target = proba_target_tuning*ones(1,trial_dur_total_in_bins); % Expand along the time axis
-                spikes_target{mm}(:,:,tt,hh,cc) = rand(N_lip,trial_dur_total_in_bins)<(aux_proba_target);
-                
-                % -- Visual input spike train --
-                % The stim_on_time controls when motion information comes in.
-                % aux_proba_vis = proba_vis*[zeros(1,stim_on_time) ones(1,trial_dur_total-stim_on_time)]...
-                %    + w_cov_vis*randn(N_vis,trial_dur_total);
-                
-                % Temporal dynamics added. HH2017
-                aux_proba_vis = proba_vis*[zeros(1,stim_on_time_in_bins) vel*gain_vel_vis]...
-                    + w_cov_vis*randn(N_vis,trial_dur_total_in_bins) ...
-                    .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel))],N_vis,1);
-                
-                % -- Vestibular ---
-                % With the temporal gain of abs(acc)
-                aux_proba_vest = proba_vest*[zeros(1,stim_on_time_in_bins) abs(acc)*gain_acc_vest]...
-                    + w_cov_vest*randn(N_vest,trial_dur_total_in_bins) ...
-                    .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel))],N_vis,1);
-                
-                % -- Stimulus condition selection --
-                if cond_this == 1
-                    aux_proba_vis = 0*aux_proba_vis; % Shut down visual activity
-                elseif cond_this ==2
-                    aux_proba_vest = 0*aux_proba_vest; % Shut down vestibular activity
-                end
-                
-                spikes_vis{mm}(:,1:trial_dur_total_in_bins,tt,hh,cc)= rand(N_vis,trial_dur_total_in_bins)<(aux_proba_vis);
-                spikes_vest{mm}(:,1:trial_dur_total_in_bins,tt,hh,cc)= rand(N_vest,trial_dur_total_in_bins)<(aux_proba_vest);
-                
-                % -- Reset the attention for motion stimuli --
-                att_gain_stim = 1; % Drop in attention to motion stimuli due to hitting whatever decision bound.
-                
-                %                 % == Override INTEGRATOR dynamics during pre-trial by setting the spikes manually (weird thing) ==
-                % !! Now we have the dedicated INTEGRATION layer so we can use all the dynamics from the very beginning. HH20170317
-                
-                %                 rate_int{mm}(:,1:stim_on_time_in_bins,tt,hh,cc) = aux_proba_target(:,1:stim_on_time_in_bins) / dt;
-                %                 spikes_int{mm}(:,1:stim_on_time_in_bins,tt,hh,cc) = spikes_target{mm}(:,1:stim_on_time_in_bins,tt,hh,cc);
-                %
-                %                 aux1_rate_int(:,stim_on_time_in_bins) = rate_int{mm}(:,stim_on_time_in_bins,tt,hh,cc);
-                %                 aux2_rate_int(:,stim_on_time_in_bins) = 0;
-                
-                % == Real network dynamics after stimlus onset ==
-                %                 k = stim_on_time_in_bins; % Time begins at stim_on_time
-                k = 1;  % Time begins at the very beginning
-                
-                while k<=trial_dur_total_in_bins-1
-                    
-                    %                     % -- I don't understand yet why there are two variables aux1 and aux2 --
-                    %                     aux1_rate_int(:,k+1) = (1-dt/time_const_vis)*aux1_rate_int(:,k)...   %  Self dynamics.  in Hz!
-                    %                         + 1/time_const_vis*(...
-                    %                         att_gain_stim * w_int_vis * spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
-                    %                         + att_gain_stim * w_int_vest * spikes_vest{mm}(:,k,tt,hh,cc)...     % Vestibular input
-                    %                         ... % + att_gain_targ * w_int_targ * spikes_target{mm}(:,k,tt,hh,cc)...  % No longer here. HH20170317
-                    %                         );             %  Target visual input (att_gain2 has been set to 0)
-                    %
-                    %                     aux2_rate_int(:,k+1) = (1-dt/time_const_int)*aux2_rate_int(:,k)+...  %  Self dynamics.  in Hz!
-                    %                         +1/time_const_int*(w_int_int*spikes_int{mm}(:,k,tt,hh,cc));  %  INTEGRATOR recurrent. in Hz!
-                    %
-                    %                     rate_int{mm}(:,k+1,tt,hh,cc) = aux1_rate_int(:,k+1) + aux2_rate_int(:,k+1) + bias_int;  %  Bias term: b_out
-                    %
-                    
-                    % -- Update INTEGRATOR layer --
-                    %                     rate_int{mm}(:,k+1,tt,hh,cc) = bias_int + (1-dt/time_const_int)*rate_int{mm}(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
-                    %                         + 1/time_const_int * (...
-                    %                               w_int_int * spikes_int{mm}(:,k,tt,hh,cc)... %  INTEGRATOR recurrent
-                    %                             + att_gain_stim * w_int_vis * spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
-                    %                             + att_gain_stim * w_int_vest * spikes_vest{mm}(:,k,tt,hh,cc)...     % Vestibular input
-                    %                         ... % + att_gain_targ * w_int_targ * spikes_target{mm}(:,k,tt,hh,cc)...  % No longer here. HH20170317
-                    %                         );
-                    
-                    % Just let the INTEGRATOR to be ideal. (straight sum) 
-                    rate_int{mm}(:,k+1,tt,hh,cc) = rate_int{mm}(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
-                        + att_gain_stim * w_int_vis * spikes_vis{mm}(:,k,tt,hh,cc)...     %  Visual input
-                        + att_gain_stim * w_int_vest * spikes_vest{mm}(:,k,tt,hh,cc);     % Vestibular input
-                    
-                    % -- Update LIP layer --
-                    rate_lip{mm}(:,k+1,tt,hh,cc) = bias_lip + (1-dt/time_const_lip)*rate_lip{mm}(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
-                        + 1/time_const_lip * (...
-                          w_lip_lip * spikes_lip{mm}(:,k,tt,hh,cc)...  %  LIP recurrent
-                        + att_gain_targ * w_lip_targ * spikes_target{mm}(:,k,tt,hh,cc)...  % Target input moved here. HH20170317
-                        + w_lip_int * spikes_int{mm}(:,k,tt,hh,cc)... %  INTEGRATOR->LIP
-                        );
-                    
-                    
-                    % -- Turn rate to binary spike for the next step --
-                    spikes_int{mm}(:,k+1,tt,hh,cc)  = (rand(N_int,1) < dt*(rate_int{mm}(:,k+1,tt,hh,cc)-threshold_int));
-                    spikes_lip{mm}(:,k+1,tt,hh,cc)  = (rand(N_lip,1) < dt*(rate_lip{mm}(:,k+1,tt,hh,cc)-threshold_lip));
-                    
-                    % -- Variable used for stopping the integration --
-                    
-                    %{
-                    if mm == 1 % Only apply to train set
-                        decision_ac(:,k+1) = rate_int{mm}(:,k+1,tt,hh,cc);
-                        %          decision_ac(:,k+1) = (1-delta_t/time_const_out)*decision_ac(:,k+1)+...
-                        %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out{1}(:,k));
-                        
-                        % -- Termination --
-                        if ((range(if_bounded*decision_ac(:,k+1)) > decis_thres) && (RT(tt,hh,cc)==0)) || (k==trial_dur_total_in_bins-1)
-                            RT(tt,hh,cc) = k;
-                            if k>fisher_wind_size-1   %  Enough data for Fisher info of at least one window
-                                last_spikes__last_Fisher_win(:,count) = sum(spikes_int{1}(:,k-fisher_wind_size+1:k)')';
-                            else
-                                last_spikes__last_Fisher_win(:,count) = sum(spikes_int{1}(:,1:k)')';
-                            end
-                            last_proba(:,count) = rate_int{mm}(:,k,tt,hh,cc);
-                            k=trial_dur_total_in_bins;  %  Terminate trial immediately
-                        end
-                    end
-                    %}
-                    
-                    if mm == 1 % Only apply to train set
-                        decision_ac(:,k+1) = rate_lip{mm}(:,k+1,tt,hh,cc);
-                        %          decision_ac(:,k+1) = (1-delta_t/time_const_out)*decision_ac(:,k+1)+...
-                        %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out{1}(:,k));
-                        
-                        % -- Termination --
-                        if if_bounded && k*dt>stim_on_time && att_gain_stim == 1 && (f_bound(decision_ac(:,k+1)) > decis_thres(unique_condition(cc)))
-                            % Set the attention for motion stimuli to zero
-                            att_gain_stim = att_gain_stim_after_hit_bound(unique_condition(cc));
-                            RT(tt,hh,cc) = (k-stim_on_time_in_bins)*dt;
-                            % last_proba(:,count) = rate_int{mm}(:,k,tt,hh,cc);
-                        end
-                    end
-                    
-                    k=k+1;
-                end  % of network dynamics
-                
-                %{
-            %%% collect spike and firing probabilities for Tin and Tout neurons
+        % === Some slicing stuffs necessary for parfor ===
+        att_gain_this = att_gain_stim_after_hit_bound(unique_condition(cc));
+        decis_thres_this = decis_thres(unique_condition(cc));
+        % -- Target input spike train --
+        aux_proba_target = proba_target_tuning*ones(1,trial_dur_total_in_bins); % Expand along the time axis
+        
+        parfor_progress(N_trial);
+        
+        parfor tt = 1:N_trial % For each trial
             
-            proba_out_av1 = proba_out_av1 + rate_int{1};
-            proba_out50(count,:) = rate_int{1}(50,:);
-            proba_out75(count,:) = rate_int{1}(75,:);
-            proba_out100(count,:) = rate_int{1}(100,:);
-            spikes_out50(count,:) = spikes_int{1}(50,:);
-            spikes_out75(count,:) = spikes_int{1}(75,:);
-            spikes_out100(count,:) = spikes_int{1}(100,:);
-            spikes_in50(count,:) = spikes_vis{1}(50,:);
             
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %% training and testing data. Spike counts and average probabilities.
-            %% size nu_unit x 2 N_trial (N_trial for each of the 2 positions)
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            spikes_in_trial11(:,count) = sum(spikes_vis{1}')';
-            spikes_in_trial12(:,count) = sum(spikes_vis{2}')';
+            spikes_target_this = rand(N_lip,trial_dur_total_in_bins)<(aux_proba_target);
             
-            spikes_out_trial01(:,count) = sum(spikes_int{1}')';
-            spikes_out_trial02(:,count) = sum(spikes_int{2}')';
+            % -- Visual input spike train --
+            aux_proba_vis = proba_vis*[zeros(1,stim_on_time_in_bins) vel*gain_vel_vis]...
+                + w_cov_vis*randn(N_vis,trial_dur_total_in_bins) ...
+                .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel))],N_vis,1);
             
-            proba_out_trial01(:,count) = sum(rate_int{1}(:,1:trial_dur_total)')'/fisher_wind_size;
-            proba_out_trial02(:,count) = sum(rate_int{2}(:,1:trial_dur_total)')'/fisher_wind_size;
+            % -- Vestibular ---
+            % With the temporal gain of abs(acc)
+            aux_proba_vest = proba_vest*[zeros(1,stim_on_time_in_bins) abs(acc)*gain_acc_vest]...
+                + w_cov_vest*randn(N_vest,trial_dur_total_in_bins) ...
+                .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel))],N_vis,1);
             
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %% collect counts in small time windows
-            %% m=1 training data, m=2 testing data
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            
-            for n=1:fisher_N_window
-                proba_count_int{m,n}(:,count)= ...
-                    sum(rate_int{m}(:,fisher_wind_offset+fisher_wind_size*(n-1)+1:fisher_wind_size*n)')'/fisher_wind_size;
-                spikes_count_int{m,n}(:,count)= ...
-                    sum(spikes_int{m}(:,fisher_wind_offset+fisher_wind_size*(n-1)+1:fisher_wind_size*n)')';
-                spikes_count_vis{m,n}(:,count)= ...
-                    sum(spikes_vis{m}(:,1:fisher_wind_offset+fisher_wind_size*n)')';
+            % -- Stimulus condition selection --
+            if cond_this == 1
+                aux_proba_vis = 0*aux_proba_vis; % Shut down visual activity
+            elseif cond_this ==2
+                aux_proba_vest = 0*aux_proba_vest; % Shut down vestibular activity
             end
-                %}
-                count = count+1;
-            end % of trial
-        end % of train/test
+            
+            spikes_vis_this = rand(N_vis,trial_dur_total_in_bins)<(aux_proba_vis);
+            spikes_vest_this = rand(N_vest,trial_dur_total_in_bins)<(aux_proba_vest);
+            
+            % -- Reset the attention for motion stimuli --
+            att_gain_stim = 1; % Drop in attention to motion stimuli due to hitting whatever decision bound.
+            
+            % == Real network dynamics after stimlus onset ==
+            %                 k = stim_on_time_in_bins; % Time begins at stim_on_time
+            k = 1;  % Time begins at the very beginning
+            
+            % -- Variables for this parfor loop --
+            rate_int_this = zeros(N_vis,trial_dur_total_in_bins);
+            rate_lip_this = zeros(N_vis,trial_dur_total_in_bins);
+            spikes_int_this = zeros(N_vis,trial_dur_total_in_bins);
+            spikes_lip_this = zeros(N_vis,trial_dur_total_in_bins);
+            decision_ac = zeros(N_int,trial_dur_total_in_bins+2);
+            
+            while k<=trial_dur_total_in_bins-1
+                
+                % -- Update INTEGRATOR layer --
+                %                     rate_int(:,k+1,tt,hh,cc) = bias_int + (1-dt/time_const_int)*rate_int(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
+                %                         + 1/time_const_int * (...
+                %                               w_int_int * spikes_int(:,k,tt,hh,cc)... %  INTEGRATOR recurrent
+                %                             + att_gain_stim * w_int_vis * spikes_vis(:,k,tt,hh,cc)...     %  Visual input
+                %                             + att_gain_stim * w_int_vest * spikes_vest(:,k,tt,hh,cc)...     % Vestibular input
+                %                         ... % + att_gain_targ * w_int_targ * spikes_target(:,k,tt,hh,cc)...  % No longer here. HH20170317
+                %                         );
+                
+                % Just let the INTEGRATOR to be ideal. (straight sum)
+                rate_int_this(:,k+1) = rate_int_this(:,k)...   %  Self dynamics.  in Hz!
+                    + att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input
+                    + att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
+                
+                % -- Update LIP layer --
+                rate_lip_this(:,k+1) = bias_lip + (1-dt/time_const_lip)*rate_lip_this(:,k)...   %  Self dynamics.  in Hz!
+                    + 1/time_const_lip * (...
+                    w_lip_lip * spikes_lip_this(:,k)...  %  LIP recurrent
+                    + att_gain_targ * w_lip_targ * spikes_target_this(:,k)...  % Target input moved here. HH20170317
+                    + w_lip_int * spikes_int_this(:,k)... %  INTEGRATOR->LIP
+                    );
+                
+                % -- Turn rate to binary spike for the next step --
+                spikes_int_this(:,k+1)  = (rand(N_int,1) < dt*(rate_int_this(:,k+1)-threshold_int));
+                spikes_lip_this(:,k+1)  = (rand(N_lip,1) < dt*(rate_lip_this(:,k+1)-threshold_lip));
+                
+                % -- Variable used for stopping the integration --
+                
+                %                     if mm == 1 % Only apply to train set
+                decision_ac(:,k+1) = rate_lip_this(:,k+1);
+                %          decision_ac(:,k+1) = (1-delta_t/time_const_out)*decision_ac(:,k+1)+...
+                %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out(:,k));
+                
+                % -- Termination --
+                if if_bounded && k*dt>stim_on_time && att_gain_stim == 1 ...
+                        && (f_bound(decision_ac(:,k+1)) > decis_thres_this)
+                    % Set the attention for motion stimuli to zero
+                    att_gain_stim = att_gain_this;
+                    RT(tt,hh,cc) = (k-stim_on_time_in_bins)*dt;
+                    % last_proba(:,count) = rate_int(:,k,tt,hh,cc);
+                end
+                %                     end
+                
+                k=k+1;
+            end  % of network dynamics
+            
+            count = count+1;
+            
+            % == Collect data at the end of this parfor ==
+            spikes_target(:,:,tt,hh,cc) = spikes_target_this;
+            spikes_vis(:,:,tt,hh,cc)= spikes_vis_this;
+            spikes_vest(:,:,tt,hh,cc)= spikes_vest_this;
+            spikes_int(:,:,tt,hh,cc)  = spikes_int_this;
+            spikes_lip(:,:,tt,hh,cc)  = spikes_lip_this;
+            rate_int(:,:,tt,hh,cc) = rate_int_this;
+            rate_lip(:,:,tt,hh,cc) = rate_lip_this;
+            
+            parfor_progress;
+            
+        end % of parfor trial
+        parfor_progress(0);
         
         fprintf('\n');
         
@@ -640,48 +572,48 @@ end % of stimulus condition
 to_plot_heading = length(unique_heading);
 to_plot_cond = length(unique_condition);
 
-rate_real_vis_aver = nanmean(spikes_vis{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-rate_real_vest_aver = nanmean(spikes_vest{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-rate_expected_int_aver = nanmean(rate_int{1}(:,:,:,to_plot_heading,to_plot_cond),3);
-rate_expected_lip_aver = nanmean(rate_lip{1}(:,:,:,to_plot_heading,to_plot_cond),3);
-rate_real_int_aver = nanmean(spikes_int{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-rate_real_lip_aver = nanmean(spikes_lip{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-rate_real_targ_aver = nanmean(spikes_target{1}(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+rate_real_vis_aver = nanmean(spikes_vis(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+rate_real_vest_aver = nanmean(spikes_vest(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+rate_expected_int_aver = nanmean(rate_int(:,:,:,to_plot_heading,to_plot_cond),3);
+rate_expected_lip_aver = nanmean(rate_lip(:,:,:,to_plot_heading,to_plot_cond),3);
+rate_real_int_aver = nanmean(spikes_int(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+rate_real_lip_aver = nanmean(spikes_lip(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+rate_real_targ_aver = nanmean(spikes_target(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
 
 % %{
 %%  ====== Animation ======
 figure(1001); clf
 
 for ttt = 1:10:length(ts)
-
+    
     % INTEGRATOR layer
     subplot(2,2,1);
     plot(prefs_int,rate_expected_int_aver(:,ttt)); hold on;
     plot(prefs_int,rate_real_int_aver(:,ttt),'r');  hold off;
     axis(gca,[min(prefs_int) max(prefs_int) min(rate_expected_int_aver(:)) max(rate_expected_int_aver(:))*2]);
     title(sprintf('Integrator, heading = %g, cond = %g, aver %g trials',unique_heading(to_plot_heading),unique_condition(to_plot_cond),N_trial));
-
+    
     % LIP layer
     subplot(2,2,2);
     plot(prefs_lip,rate_expected_lip_aver(:,ttt)); hold on;
     plot(prefs_lip,rate_real_lip_aver(:,ttt),'r');  hold off;
     axis(gca,[min(prefs_lip) max(prefs_lip) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))*2]);
     title(sprintf('LIP, t = %g',ttt*dt*1000));
-
+    
     % Visual layer
     subplot(2,2,3);
-    plot(prefs_int,aux_proba_vis(:,ttt)/dt); hold on;
-    plot(prefs_int,rate_real_vis_aver(:,ttt),'r'); hold off; 
-    axis(gca,[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(aux_proba_vis(:)/dt)*2]);
+    %     plot(prefs_int,aux_proba_vis(:,ttt)/dt); hold on;
+    %     plot(prefs_int,rate_real_vis_aver(:,ttt),'r'); hold off;
+    %     axis(gca,[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(aux_proba_vis(:)/dt)*2]);
     title('Visual');
     
     % Target layer
     subplot(2,2,4);
-    plot(prefs_lip,proba_target_tuning/dt); hold on; 
-    plot(prefs_lip,rate_real_targ_aver(:,ttt),'r'); hold off; 
+    plot(prefs_lip,proba_target_tuning/dt); hold on;
+    plot(prefs_lip,rate_real_targ_aver(:,ttt),'r'); hold off;
     axis(gca,[min(prefs_lip) max(prefs_lip) min(proba_target_tuning(:)/dt) max(proba_target_tuning(:)/dt)*2]);
     title('Target');
-
+    
     drawnow;
 end
 
@@ -723,15 +655,15 @@ for cc = 1:length(unique_condition)
     subplot(3,2,2*unique_condition(cc)-1);
     
     for trialtoplot = 1:ceil(N_trial/10):N_trial
-        plot(ts,rate_lip{1}(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
-        plot(ts,rate_lip{1}(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
+        plot(ts,rate_lip(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
+        plot(ts,rate_lip(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
     end
     plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
     axis tight;
     
     if if_bounded
         plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
-%         ylim([min(ylim),decis_thres(k)*1.1]);
+        %         ylim([min(ylim),decis_thres(k)*1.1]);
     end
     
     title(sprintf('rate\\_lip, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
@@ -740,23 +672,23 @@ for cc = 1:length(unique_condition)
     subplot(3,2,2*unique_condition(cc));
     
     for trialtoplot = 1:ceil(N_trial/10):N_trial
-        plot(ts,rate_int{1}(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
-        plot(ts,rate_int{1}(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
+        plot(ts,rate_int(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
+        plot(ts,rate_int(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
     end
     plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
     axis tight;
     
-%     if if_bounded
-%         plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
-% %         ylim([min(ylim),decis_thres*1.1]);
-%     end
+    %     if if_bounded
+    %         plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
+    % %         ylim([min(ylim),decis_thres*1.1]);
+    %     end
     
     title(sprintf('rate\\_int, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
     
     
     %     subplot(3,2,2);
-    %     plot(ts,nanmean(rate_lip{1}(right_targ_ind,:,:,to_plot_heading,cc),3)...
-    %         -nanmean(rate_lip{1}(left_targ_ind,:,:,to_plot_heading,cc),3),'color',colors(unique_condition(cc),:),'linew',2);
+    %     plot(ts,nanmean(rate_lip(right_targ_ind,:,:,to_plot_heading,cc),3)...
+    %         -nanmean(rate_lip(left_targ_ind,:,:,to_plot_heading,cc),3),'color',colors(unique_condition(cc),:),'linew',2);
     %     hold on;
     %     title(sprintf('averaged of all %g trials (correct + wrong), pref-null',N_trial));
     %     axis tight;
@@ -773,7 +705,7 @@ set(gcf,'name','Behavior','uni','norm','pos',[0.32       0.071       0.357      
 subplot(2,1,1);
 for cc = 1:length(unique_condition)
     % Make decisions
-    rate_int_at_decision = squeeze(rate_lip{1}(:,end,:,:,cc)); % Using lip
+    rate_int_at_decision = squeeze(rate_lip(:,end,:,:,cc)); % Using lip
     
     [~, pos_max_rate_int_at_decision] = max(rate_int_at_decision,[],1);
     choices{cc} = prefs_int(shiftdim(pos_max_rate_int_at_decision)) >= 0; % 1 = rightward, 0 = leftward
@@ -842,8 +774,8 @@ for hh = 1:length(unique_heading)
         select_correct = (choices{cc}(:,hh) == (unique_heading(hh)>=0));
         
         % Although note here the PREF and NULL activity become correlated.
-        PSTH_condition_absheading_choice(:,cc,hh,1) = squeeze(nanmean(rate_lip{1}(right_targ_ind,:,select_correct,hh,cc),3));
-        PSTH_condition_absheading_choice(:,cc,hh,2) = squeeze(nanmean(rate_lip{1}(left_targ_ind,:,select_correct,hh,cc),3));
+        PSTH_condition_absheading_choice(:,cc,hh,1) = squeeze(nanmean(rate_lip(right_targ_ind,:,select_correct,hh,cc),3));
+        PSTH_condition_absheading_choice(:,cc,hh,2) = squeeze(nanmean(rate_lip(left_targ_ind,:,select_correct,hh,cc),3));
         
         plot(ts,PSTH_condition_absheading_choice(:,cc,hh,1),'color',colors(unique_condition(cc),:),'linew',2.5);
         plot(ts,PSTH_condition_absheading_choice(:,cc,hh,2),'--','color',colors(unique_condition(cc),:),'linew',2.5);
@@ -855,7 +787,7 @@ for hh = 1:length(unique_heading)
     
     if if_bounded
         plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
-%         ylim([min(ylim),decis_thres*1.1]);
+        %         ylim([min(ylim),decis_thres*1.1]);
     end
     
     y_min = min(y_min,min(ylim));
