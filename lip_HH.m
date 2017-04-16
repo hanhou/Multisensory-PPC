@@ -77,7 +77,7 @@ unique_heading = [0 1 2 4 8];
 unique_condition = [1 2 3];
 % unique_heading = [0 8];
 % unique_condition = [3];
-N_trial = 10; % For each condition
+N_trial = 100; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
