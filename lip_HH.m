@@ -3,9 +3,10 @@
 % Modified by HH 2017 @ UNIGE
 % Adapted for the vestibular-visual multisensory heading discrimintation task
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% function lip_HH
 tic
-clear
-clear global
+%clear
+%clear global
 
 load h
 
