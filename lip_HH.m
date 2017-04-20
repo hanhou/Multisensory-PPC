@@ -3,10 +3,11 @@
 % Modified by HH 2017 @ UNIGE
 % Adapted for the vestibular-visual multisensory heading discrimintation task
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% function lip_HH
-tic
-clear
-clear global
+function lip_HH
+
+total_time = tic;
+%clear
+%clear global
 
 if(~isdeployed)
   cd(fileparts(which(mfilename)));
@@ -14,8 +15,9 @@ end
 addpath(genpath(pwd));
 
 if strcmp(version('-release'),'2014b')    % ION cluster;
+   hostname = char( getHostName( java.net.InetAddress.getLocalHost)) % Get host name
    if isempty(gcp('nocreate'))
-       parpool(20);
+       parpool(hostname(1:strfind(hostname,'.')-1),20);
    end
 end
 
@@ -57,9 +59,9 @@ prefs_lip = linspace(-180,180,N_lip);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Decision bound
 if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
-f_bound = @(x) max(x);
+% f_bound = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = 33*[1 1 1]; % bound height, for different conditions
+decis_thres = 30*[1 1 1+6/30]; % bound height, for different conditions
 att_gain_stim_after_hit_bound = [0 0 0];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -85,7 +87,7 @@ unique_heading = [0 1 2 4 8];
 unique_condition = [1 2 3];
 % unique_heading = [0 8];
 % unique_condition = [3];
-N_trial = 100; % For each condition
+N_trial = 50; % For each condition
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -201,7 +203,7 @@ threshold_int = 0.0;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 g_w_lip_int = 12;
 K_lip_int = 5;
-dc_w_lip_int = -4.2;
+dc_w_lip_int = -4.3;
 
 amp_I_lip_int = 0;  % Mexico hat shape
 K_lip_int_I = 2;
@@ -211,7 +213,7 @@ K_lip_int_I = 2;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 g_w_lip_lip = 10;
 K_lip_lip = 20;
-dc_w_lip_lip = -8;
+dc_w_lip_lip = -6;
 
 amp_I_lip = 0;  % Mexico hat shape
 K_lip_I = 2;
@@ -243,7 +245,7 @@ fisher_N_window = 4;
 % 1. firing rate in Hz (rate_xxx),
 % 2. firing probability for each bin (proba_xxx),
 % 3. binary spike train for each bin (spikes_xxx)
-% The network dynamics are computed like: Rate_in --> Prob_in --> Spike_in --> Spike_out --> Rate_out
+% The network dynamics are computed like: Rate_in --> Prob_in --> Spike_in --> Spikes_out --> Rate_out
 
 aux1_rate_int = zeros(N_int,trial_dur_total_in_bins+2);
 aux2_rate_int = zeros(N_int,trial_dur_total_in_bins+2);
@@ -290,12 +292,12 @@ w_lip_lip = zeros(N_lip,N_lip);
 for nn=1:N_int
     
     % -- VIS->Int, Vest->Int --
-    %     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-    %         .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-    %         + dc_w_int_vis/N_vis;   % Offset
-    %     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-    %         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-    %         + dc_w_int_vest/N_vest;   % Offset
+%         w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+%             .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+%             + dc_w_int_vis/N_vis;   % Offset
+%         w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+%             .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+%             + dc_w_int_vest/N_vest;   % Offset
     
     % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
@@ -390,6 +392,7 @@ w_cov_vest = real(sqrtm(cov_vest));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Main loop
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
+par_time = tic;
 
 % === To reduce the overheads, I put all conditions*heading*reps into a large matrix. HH20170417 ===
 [x,y]=meshgrid(1:length(unique_condition),1:length(unique_heading));
@@ -476,8 +479,9 @@ parfor_progress(n_parfor_loops);
 parfor tt = 1:n_parfor_loops % For each trial
     
     % -- Get data from cheat sheet --
-    cc_this = cc_hh_cheatsheet(tt,1);
-    hh_this = cc_hh_cheatsheet(tt,2);
+    cond_this = cc_hh_cheatsheet(tt,:);
+    cc_this = cond_this(1);
+    hh_this = cond_this(2);
     
     % -- Target input spike train --
     spikes_target_this = rand(N_lip,trial_dur_total_in_bins)<(aux_proba_target);
@@ -554,7 +558,9 @@ parfor tt = 1:n_parfor_loops % For each trial
         
         % -- Termination --
         if if_bounded && k*dt>stim_on_time && att_gain_stim == 1 ...
-                && (f_bound(decision_ac(:,k+1)) > decis_thres_this)
+               ... && (max(decision_ac(:,k+1)) > decis_thres_this) 
+                && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...
+                       mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this
             % Set the attention for motion stimuli to zero
             att_gain_stim = att_gain_this;
             RT(tt) = (k-stim_on_time_in_bins)*dt;
@@ -590,22 +596,24 @@ rate_int = reshape(rate_int,N_lip,trial_dur_total_in_bins,N_trial,length(unique_
 rate_lip = reshape(rate_lip,N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
 RT = reshape(RT,N_trial,length(unique_heading),length(unique_condition));
 
+par_time = toc(par_time)
 
 %% == Plotting example network activities ==
 to_plot_heading = length(unique_heading);
 to_plot_cond = length(unique_condition);
 
-rate_real_vis_aver = nanmean(spikes_vis(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-rate_real_vest_aver = nanmean(spikes_vest(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-rate_expected_int_aver = nanmean(rate_int(:,:,:,to_plot_heading,to_plot_cond),3);
-rate_expected_lip_aver = nanmean(rate_lip(:,:,:,to_plot_heading,to_plot_cond),3);
-rate_real_int_aver = nanmean(spikes_int(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-rate_real_lip_aver = nanmean(spikes_lip(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-rate_real_targ_aver = nanmean(spikes_target(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-
 % %{
 %%  ====== Animation ======
 if if_debug
+    
+    rate_real_vis_aver = nanmean(spikes_vis(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+    rate_real_vest_aver = nanmean(spikes_vest(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+    rate_expected_int_aver = nanmean(rate_int(:,:,:,to_plot_heading,to_plot_cond),3);
+    rate_expected_lip_aver = nanmean(rate_lip(:,:,:,to_plot_heading,to_plot_cond),3);
+    rate_real_int_aver = nanmean(spikes_int(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+    rate_real_lip_aver = nanmean(spikes_lip(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+    rate_real_targ_aver = nanmean(spikes_target(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
+    
     figure(1001); clf
     
     for ttt = 1:10:length(ts)
@@ -671,7 +679,7 @@ end
 
 % ====== Example Pref and Null traces ======
 %%{
-if if_debug
+if if_debug || 1
     set(figure(1002),'name','Example PSTHs'); clf;
     set(gcf,'uni','norm','pos',[0.003       0.039       0.555       0.878]);
     
@@ -718,7 +726,59 @@ if if_debug
         %     title(sprintf('averaged of all %g trials (correct + wrong), pref-null',N_trial));
         %     axis tight;
     end
+    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/example_8degree_%s.png',hostname));
+    
+    to_plot_heading  = 1; 
+    set(figure(1003),'name','Example PSTHs'); clf;
+    set(gcf,'uni','norm','pos',[0.003       0.039       0.555       0.878]);
+    
+    for cc = 1:length(unique_condition)
+        % --- LIP ---
+        subplot(3,2,2*unique_condition(cc)-1);
+        
+        for trialtoplot = 1:ceil(N_trial/10):N_trial
+            plot(ts,rate_lip(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
+            plot(ts,rate_lip(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
+        end
+        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
+        axis tight;
+        
+        if if_bounded
+            plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
+            %         ylim([min(ylim),decis_thres(k)*1.1]);
+        end
+        
+        title(sprintf('rate\\_lip, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
+        
+        % --- Int ---
+        subplot(3,2,2*unique_condition(cc));
+        
+        for trialtoplot = 1:ceil(N_trial/10):N_trial
+            plot(ts,rate_int(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
+            plot(ts,rate_int(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
+        end
+        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
+        axis tight;
+        
+        %     if if_bounded
+        %         plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
+        % %         ylim([min(ylim),decis_thres*1.1]);
+        %     end
+        
+        title(sprintf('rate\\_int, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
+        
+        
+        %     subplot(3,2,2);
+        %     plot(ts,nanmean(rate_lip(right_targ_ind,:,:,to_plot_heading,cc),3)...
+        %         -nanmean(rate_lip(left_targ_ind,:,:,to_plot_heading,cc),3),'color',colors(unique_condition(cc),:),'linew',2);
+        %     hold on;
+        %     title(sprintf('averaged of all %g trials (correct + wrong), pref-null',N_trial));
+        %     axis tight;
+    end
+    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/example_0degree_%s.png',hostname));
+    
 end
+
 %}
 
 % ====== Behavior performance ======
@@ -760,24 +820,30 @@ for cc = 1:length(unique_condition)
         
         RT_this_cc_mean(hh,1) = mean(RT(select_correct,hh,cc),1);
         RT_this_cc_se(hh,1) = std(RT(select_correct,hh,cc),[],1);
+        
+        RT_this_cc_mean_wrong(hh,1) = mean(RT(~select_correct,hh,cc),1);
+        RT_this_cc_se_wrong(hh,1) = std(RT(~select_correct,hh,cc),[],1);
+
     end
     
     errorbar(unique_heading+(cc-2)*0.2,RT_this_cc_mean,RT_this_cc_se,'o-','color',colors(unique_condition(cc),:),...
         'markerfacecolor',colors(unique_condition(cc),:),'markersize',10,'linew',2);
     hold on;
-    
-    plot(vel/max(vel)*max(xlim)/5,t_motion,'k--');
-    title(sprintf('RT, all trials (correct + wrong), Bound = %s',num2str(decis_thres)));
-
-
+    errorbar(unique_heading+(cc-2)*0.2,RT_this_cc_mean_wrong,RT_this_cc_se_wrong,'o--','color',colors(unique_condition(cc),:),...
+        'markerfacecolor',colors(unique_condition(cc),:),'markersize',7,'linew',1);
 end
 
+subplot(2,1,2);
+plot(vel/max(vel)*max(xlim)/5,t_motion,'k--');
+title(sprintf('RT, all trials (correct), Bound = %s',num2str(decis_thres)));
+
+subplot(2,1,1);
 if length(unique_condition) == 3
     pred_thres = (psycho(1,2)^(-2)+psycho(2,2)^(-2))^(-1/2);
     set(text(min(xlim),0.4+0.1*(cc+1),sprintf('pred = %g\n',pred_thres)),'color','k');
 end
 
-%  export_fig('-painters','-nocrop','-q100','-m2' ,sprintf('./result/behavior.png'));
+export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/behavior_%s.png',hostname));
 %}
 
 %% ===== Averaged PSTH, different angles =====
@@ -827,7 +893,7 @@ for hh = 1:length(unique_heading)
 end
 
 set(findobj(435,'type','axes'),'ylim',[y_min y_max]);
-% export_fig('-painters','-nocrop','-q100','-m2' ,sprintf('./result/PSTH.png'));
+export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/PSTH_%s.png',hostname));
 
 % =====  Delta-PSTH (stim type), heading, correct only ====
 set(figure(436),'name','Delta PSTH'); clf;
@@ -849,10 +915,10 @@ for hh = 1:length(unique_heading)
     axis tight;
 end
 set(findobj(436,'type','axes'),'ylim',[y_min y_max]);
-% export_fig('-painters','-nocrop','-q100','-m2' ,sprintf('./result/deltaPSTH.png'));
+export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/deltaPSTH_%s.png',hostname));
 
 %}
 
-toc
+total_time = toc(total_time)
 
 
