@@ -1,98 +1,84 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% LNP simulations for decision making
+%% LNP simulations for multisensory decision making
 % Modified by HH 2017 @ UNIGE
 % Adapted for the vestibular-visual multisensory heading discrimintation task
+%
+% lip_HH(para_override)
+% para_override: {'name1',value1; 'name2',value2, ...}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function lip_HH
+function lip_HH(para_override)
 
 total_time = tic;
 %clear
 %clear global
 
 if(~isdeployed)
-  cd(fileparts(which(mfilename)));
+    cd(fileparts(which(mfilename)));
 end
 addpath(genpath(pwd));
 
-if strcmp(version('-release'),'2014b')    % ION cluster;
-   hostname = char( getHostName( java.net.InetAddress.getLocalHost)) % Get host name
-   if isempty(gcp('nocreate'))
-       parpool(hostname(1:strfind(hostname,'.')-1),20);
-   end
-end
-
 rand('state',sum(100*clock));
 
-% %{
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Parameters
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if strcmp(version('-release'),'2014b')    % ION cluster;
+    hostname = char( getHostName( java.net.InetAddress.getLocalHost)); % Get host name
+    if isempty(gcp('nocreate'))
+        parpool(hostname(1:strfind(hostname,'.')-1),20);
+    end
+    ION_cluster = 1;
+else % My own computer
+    if isempty(gcp('nocreate'))
+        parpool;
+    end
+    ION_cluster = 0;
+end
 
 % === Switches ===
-if_debug = 0;
-if_test_set = 0;
+if_debug = ~ION_cluster;
 
-% === Sizes ===
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Parameters Start %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% ============ Sizes ============
 % Input layers
-N_vis = 200; % Visual motion signal
-prefs_vis = linspace(-180,180,N_vis);
-
-N_vest = 200; % Vestibular motion signal
-prefs_vest = linspace(-180,180,N_vis);
-
 N_targets = 2; % Target input
+N_vis = 200; % Visual motion signal
+N_vest = 200; % Vestibular motion signal
 
 % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
 % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
 % which has a short time constant, keeps receiving target input but does not integrate it.
 % For most part of the code, I just rename the old "_lip" stuff to "_int"
 N_int = 200;
-prefs_int = linspace(-180,180,N_int);
+N_lip = 200;  % Output layers (Real LIP layer)
 
-% Output layers (Real LIP layer)
-N_lip = 200;
-prefs_lip = linspace(-180,180,N_lip);
-
-[~,right_targ_ind] = min(abs(prefs_lip - 90)); % Left and right for the heading task
-[~,left_targ_ind] = min(abs(prefs_lip - -90));
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Decision bound
-if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
-% f_bound = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
-%  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = 30*[1 1 1+6/30]; % bound height, for different conditions
-att_gain_stim_after_hit_bound = [0 0 0];
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-% === Times ===
+% ============ Times ============
 dt = 2e-3; % Size of time bin in seconds
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
 motion_duration = 1.5; % in s
 
-trial_dur_total_in_bins = round(trial_dur_total/dt); %% in time bins (including pre_trial_dur)
-stim_on_time_in_bins = stim_on_time/dt; % Time of motion start, in time bins.
+% ============ Decision bound ============
+if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
+% f_bound = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
+%  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
+decis_thres = 30*[1 1 1+6/30]; % bound height, for different conditions
+att_gain_stim_after_hit_bound = [0 0 0];
 
-ts = ((0:trial_dur_total_in_bins-1)-stim_on_time_in_bins)*dt; % in s
-
-if stim_on_time_in_bins>trial_dur_total_in_bins
-    error('pre_trial_dur cannot be longer than trial_dur');
+% =============== Conditions ===============
+if ION_cluster
+    unique_heading = [0 1 2 4 8];
+    unique_condition = [1 2 3];
+    N_rep = 100; % For each condition
+else
+    unique_heading = [0 8];
+    unique_condition = [3];
+    N_rep = 10;
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% === Stimuli ===
-unique_heading = [0 1 2 4 8];
-unique_condition = [1 2 3];
-% unique_heading = [0 8];
-% unique_condition = [3];
-N_trial = 50; % For each condition
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-colors = [0 0 1; 1 0 0; 0 0.8 0.4];
-
+% =================== Stimuli ===================
+% Temporal dynamics
+num_of_sigma = 3.5; amp = 0.2;
 
 % Parameters roughly follow the Yong Gu's MST data.
 % Visual
@@ -132,9 +118,115 @@ K_target = 4;
 slope_norm_target=0.5;
 dc_norm_target = 0.5;
 
-% == Temporal dynamics ==
+% Gains
+% Maybe should be set such that gain_vis:gain_vest = (integral of abs(a))/(integral of v)
+gain_vel_vis = 7; % (m/s)^-1
+gain_acc_vest = 2; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
+
+% =================== Network configuration ===================
+% -- Time constant for integration
+time_const_int = 10000e-3; % in s
+time_const_lip = 100e-3; % in s
+
+% ---- Visual to INTEGRATOR ----
+g_w_int_vis = 7;
+dc_w_int_vis = -0;
+k_int_vis = 5; % Larger, narrower
+k_int_vis_along_vis = 0.1; % Larger, wider
+
+% ---- Vestibular to INTEGRATOR ----
+g_w_int_vest = g_w_int_vis;
+dc_w_int_vest = dc_w_int_vis;
+k_int_vest = k_int_vis;
+k_int_vest_along_vest = k_int_vis_along_vis;
+
+% ----- Targets to LIP ------
+g_w_lip_targ= 10;
+k_lip_targ= 5;
+att_gain_targ = 0.7; % Drop in attention to visual target once motion stimulus appears.
+
+% % ------- Recurrent connectivity in INTEGRATOR --------
+% g_w_int_int = 35;
+% K_int_int = 10;
+% dc_w_int_int = -11;
+%
+% amp_I_int = 0;  % Mexico hat shape
+% K_int_I = 2;
+%
+% Input-output function of INTEGRATOR
+bias_int = 0;
+threshold_int = 0.0;
+
+% ----- INTEGRATOR to the real LIP ----
+g_w_lip_int = 12;
+k_lip_int = 5;
+dc_w_lip_int = -4.3;
+
+amp_I_lip_int = 0;  % Mexico hat shape
+k_lip_int_I = 2;
+
+% ----- LIP recurrent connection ------
+g_w_lip_lip = 15;
+k_lip_lip = 20;
+dc_w_lip_lip = -11;
+
+amp_I_lip = 0;  % Mexico hat shape
+k_lip_I = 2;
+
+% Input-output function of LIP
+bias_lip = 0;
+threshold_lip = 0.0;
+
+%%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
+if nargin == 1
+    len = size(para_override,1);
+    for ll = 1:len
+        if exist(para_override{ll,1},'var')
+            eval([para_override{ll,1} '= para_override{ll,2};']);
+            fprintf('Overriding %s = %s...\n',para_override{ll,1},num2str(para_override{ll,2}));
+        else
+            fprintf('Parameter ''%s'' not found...\n',para_override{ll,1});
+        end
+    end
+end
+
+% Pack all paras
+para_list = who;
+for i = 1:length(para_list)
+    paras.(para_list{i}) = eval(para_list{i});
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Pure Parameters End %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Some preparation (after the pure parameter session in case some paras are overriden)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% ---- Network related ---- 
+prefs_vis = linspace(-180,180,N_vis);
+prefs_vest = linspace(-180,180,N_vis);
+prefs_int = linspace(-180,180,N_int);
+prefs_lip = linspace(-180,180,N_lip);
+[~,right_targ_ind] = min(abs(prefs_lip - 90)); % Left and right for the heading task
+[~,left_targ_ind] = min(abs(prefs_lip - -90));
+
+gain_func_along_vis = @(x) (1./(1+exp(-(abs(90-abs(90-abs(x))))/k_int_vis_along_vis))-0.5)*2;
+gain_func_along_vest = @(x) (1./(1+exp(-(abs(90-abs(90-abs(x))))/k_int_vest_along_vest))-0.5)*2;
+
+% ---- Time related ---- 
+trial_dur_total_in_bins = round(trial_dur_total/dt); %% in time bins (including pre_trial_dur)
+stim_on_time_in_bins = stim_on_time/dt; % Time of motion start, in time bins.
+ts = ((0:trial_dur_total_in_bins-1)-stim_on_time_in_bins)*dt; % in s
+
+if stim_on_time_in_bins>trial_dur_total_in_bins
+    error('pre_trial_dur cannot be longer than trial_dur');
+end
+
+% --- Stimuli related ---
 t_motion = 0:dt:trial_dur_total-stim_on_time; % in s
-num_of_sigma = 3.5; amp = 0.2;
 miu = motion_duration/2; sigma = motion_duration/2/num_of_sigma;
 vel = exp(-(t_motion-miu).^2/(2*sigma^2));
 vel = vel*amp/sum(vel*dt) ; % in m/s. Normalized to distance
@@ -144,11 +236,6 @@ acc = diff(vel)/dt; % in m/s^2
 t_motion(end) = [];
 vel(end) = [];
 
-% Gains
-% Maybe should be set such that gain_vis:gain_vest = (integral of abs(a))/(integral of v)
-gain_vel_vis = 7; % (m/s)^-1
-gain_acc_vest = 2; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
-
 if if_debug
     figure(111);clf
     set(gcf,'name','Motion profile','uni','norm','pos',[0.632       0.381       0.358       0.403]);
@@ -157,85 +244,7 @@ if if_debug
     ylabel(h(2),'Acceleration (m^2/s)');
 end
 
-
-% === Network configuration ===
-
-% -- Time constant for integration
-time_const_int = 10000e-3; % in s
-time_const_lip = 100e-3; % in s
-
-% -- Visual to INTEGRATOR
-g_w_int_vis = 7;
-dc_w_int_vis = -0;
-
-K_int_vis = 5; % Larger, narrower
-K_int_vis_along_vis = 0.1; % Larger, wider
-gain_func_along_vis = @(x) (1./(1+exp(-(abs(90-abs(90-abs(x))))/K_int_vis_along_vis))-0.5)*2;
-
-% -- Vestibular to INTEGRATOR
-g_w_int_vest = g_w_int_vis;
-dc_w_int_vest = dc_w_int_vis;
-
-K_int_vest = K_int_vis;
-K_int_vest_along_vest = K_int_vis_along_vis;
-gain_func_along_vest = @(x) (1./(1+exp(-(abs(90-abs(90-abs(x))))/K_int_vest_along_vest))-0.5)*2;
-
-% --- Targets to LIP ----
-g_w_lip_targ= 10;
-K_lip_targ= 5;
-att_gain_targ = 0.7; % Drop in attention to visual target once motion stimulus appears.
-
-% % --- Recurrent connectivity in INTEGRATOR
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% g_w_int_int = 35;
-% K_int_int = 10;
-% dc_w_int_int = -11;
-%
-% amp_I_int = 0;  % Mexico hat shape
-% K_int_I = 2;
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-% % Input-output function of INTEGRATOR
-bias_int = 0;
-threshold_int = 0.0;
-
-% --- INTEGRATOR to the real LIP
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_int = 12;
-K_lip_int = 5;
-dc_w_lip_int = -4.3;
-
-amp_I_lip_int = 0;  % Mexico hat shape
-K_lip_int_I = 2;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% --- LIP recurrent connection
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-g_w_lip_lip = 10;
-K_lip_lip = 20;
-dc_w_lip_lip = -6;
-
-amp_I_lip = 0;  % Mexico hat shape
-K_lip_I = 2;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% Input-output function of LIP
-bias_lip = 0;
-threshold_lip = 0.0;
-
-
-% === For statistics ===
-
-shuffle_flag = 0; %shuffles trials and computes shuffled Fisher information
-info_out_flag = 1; %controls whether Fisher information in the output layer is being computed
-info_in_flag = 1; %controls whether Fisher information in the input layer is being computed
-
-% duration of the window used to compute Fisher information
-fisher_wind_size = 50;
-fisher_wind_offset = 0;
-fisher_N_window = 4;
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Variable initialization (I moved here)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -292,18 +301,18 @@ w_lip_lip = zeros(N_lip,N_lip);
 for nn=1:N_int
     
     % -- VIS->Int, Vest->Int --
-%         w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-%             .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-%             + dc_w_int_vis/N_vis;   % Offset
-%         w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-%             .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-%             + dc_w_int_vest/N_vest;   % Offset
+    %         w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+    %             .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+    %             + dc_w_int_vis/N_vis;   % Offset
+    %         w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+    %             .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+    %             + dc_w_int_vest/N_vest;   % Offset
     
     % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
-    w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+    w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
         .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
         + dc_w_int_vis/N_vis;   % Offset
-    w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+    w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
         .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
         + dc_w_int_vest/N_vest;   % Offset
     
@@ -317,18 +326,18 @@ end
 for nn=1:N_lip
     
     % -- Targ->LIP --
-    w_lip_targ(nn,:) = g_w_lip_targ/N_int *(exp(K_lip_targ*(cos((prefs_lip-prefs_lip(nn))/360 *2*pi)-1)));  %  Target input
+    w_lip_targ(nn,:) = g_w_lip_targ/N_int *(exp(k_lip_targ*(cos((prefs_lip-prefs_lip(nn))/360 *2*pi)-1)));  %  Target input
     
     % -- Int->LIP --
     w_lip_int(nn,:) = g_w_lip_int/N_int*...
-        ((exp(K_lip_int*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1)))-...
-        amp_I_lip_int*(exp(K_lip_int_I*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1))))...
+        ((exp(k_lip_int*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1)))-...
+        amp_I_lip_int*(exp(k_lip_int_I*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1))))...
         + dc_w_lip_int/N_int;
     
     % -- LIP->LIP --
     w_lip_lip(nn,:) = g_w_lip_lip/N_lip*...
-        ((exp(K_lip_lip*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
-        amp_I_lip*(exp(K_lip_I*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1))))...
+        ((exp(k_lip_lip*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
+        amp_I_lip*(exp(k_lip_I*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1))))...
         + dc_w_lip_lip/N_lip;
 end
 
@@ -397,7 +406,7 @@ par_time = tic;
 % === To reduce the overheads, I put all conditions*heading*reps into a large matrix. HH20170417 ===
 [x,y]=meshgrid(1:length(unique_condition),1:length(unique_heading));
 z=[x(:) y(:)];
-cc_hh_cheatsheet = reshape(repmat(z,1,N_trial)',2,[])'; % All combinations of cc and hh
+cc_hh_cheatsheet = reshape(repmat(z,1,N_rep)',2,[])'; % All combinations of cc and hh
 n_parfor_loops = size(cc_hh_cheatsheet,1);
 
 proba_vis_for_each_heading = zeros(N_vis,length(unique_heading));
@@ -408,7 +417,7 @@ proba_vest_for_each_heading = zeros(N_vest,length(unique_heading));
 % spikes_target = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
 % spikes_vis = zeros(N_vis,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
 % spikes_vest = zeros(N_vest,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-% 
+%
 % rate_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
 % spikes_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
 % rate_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
@@ -429,7 +438,7 @@ RT = (trial_dur_total-stim_on_time) * ones(n_parfor_loops,1);
 % --- Generate stuffs that are cc/hh- dependent --
 for hh = 1:length(unique_heading)  % Motion directions
     
-    % ==== Not trial- or time- dependent stuffs ===    
+    % ==== Not trial- or time- dependent stuffs ===
     %         fprintf('cond = %g, heading = %g\n  ',cond_this, stim_this);
     
     % -- Sensory responses --
@@ -461,7 +470,7 @@ for cc = 1:length(unique_condition)
     decis_thres_this = decis_thres(unique_condition(cc));
 end
 
-% --- Generate other stuffs that are not cc/hh- dependent) ---
+% --- Generate other stuffs that are not cc/hh- dependent ---
 % proba_targ: proba of firing of target neurons in response to visual targets
 % pos_targ = stim_this + [0:360/N_targets:359.9];
 pos_targ = [-90 90]; % Always these two for fine discrimination task. HH2017
@@ -558,9 +567,9 @@ parfor tt = 1:n_parfor_loops % For each trial
         
         % -- Termination --
         if if_bounded && k*dt>stim_on_time && att_gain_stim == 1 ...
-               ... && (max(decision_ac(:,k+1)) > decis_thres_this) 
+                ... && (max(decision_ac(:,k+1)) > decis_thres_this)
                 && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...
-                       mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this
+                mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this
             % Set the attention for motion stimuli to zero
             att_gain_stim = att_gain_this;
             RT(tt) = (k-stim_on_time_in_bins)*dt;
@@ -587,338 +596,29 @@ parfor_progress(0);
 fprintf('\n');
 
 % Reorganize data saved in parloop
-spikes_target = reshape(spikes_target,N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-spikes_vis= reshape(spikes_vis,N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-spikes_vest= reshape(spikes_vest,N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-spikes_int  = reshape(spikes_int,N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-spikes_lip  = reshape(spikes_lip,N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-rate_int = reshape(rate_int,N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-rate_lip = reshape(rate_lip,N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-RT = reshape(RT,N_trial,length(unique_heading),length(unique_condition));
+spikes_target = reshape(spikes_target,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
+spikes_vis= reshape(spikes_vis,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
+spikes_vest= reshape(spikes_vest,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
+spikes_int  = reshape(spikes_int,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
+spikes_lip  = reshape(spikes_lip,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
+rate_int = reshape(rate_int,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
+rate_lip = reshape(rate_lip,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
+RT = reshape(RT,N_rep,length(unique_heading),length(unique_condition));
+
+% Pack and save data
+if if_debug
+    save last_result.mat paras spikes_target spikes_vis spikes_vest spikes_int spikes_lip rate_int rate_lip RT;
+else
+    save('./result/last_result.mat','paras','spikes_lip','RT','-v7.3');
+end
+
+% assignin('base','result', result);
 
 par_time = toc(par_time)
 
-%% == Plotting example network activities ==
-to_plot_heading = length(unique_heading);
-to_plot_cond = length(unique_condition);
-
-% %{
-%%  ====== Animation ======
-if if_debug
-    
-    rate_real_vis_aver = nanmean(spikes_vis(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-    rate_real_vest_aver = nanmean(spikes_vest(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-    rate_expected_int_aver = nanmean(rate_int(:,:,:,to_plot_heading,to_plot_cond),3);
-    rate_expected_lip_aver = nanmean(rate_lip(:,:,:,to_plot_heading,to_plot_cond),3);
-    rate_real_int_aver = nanmean(spikes_int(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-    rate_real_lip_aver = nanmean(spikes_lip(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-    rate_real_targ_aver = nanmean(spikes_target(:,:,:,to_plot_heading,to_plot_cond),3)/dt;
-    
-    figure(1001); clf
-    
-    for ttt = 1:10:length(ts)
-        
-        % INTEGRATOR layer
-        subplot(2,2,1);
-        plot(prefs_int,rate_expected_int_aver(:,ttt)); hold on;
-        plot(prefs_int,rate_real_int_aver(:,ttt),'r');  hold off;
-        axis(gca,[min(prefs_int) max(prefs_int) min(rate_expected_int_aver(:)) max(rate_expected_int_aver(:))*2]);
-        title(sprintf('Integrator, heading = %g, cond = %g, aver %g trials',unique_heading(to_plot_heading),unique_condition(to_plot_cond),N_trial));
-        
-        % LIP layer
-        subplot(2,2,2);
-        plot(prefs_lip,rate_expected_lip_aver(:,ttt)); hold on;
-        plot(prefs_lip,rate_real_lip_aver(:,ttt),'r');  hold off;
-        axis(gca,[min(prefs_lip) max(prefs_lip) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))*2]);
-        title(sprintf('LIP, t = %g',ttt*dt*1000));
-        
-        % Visual layer
-        subplot(2,2,3);
-        %     plot(prefs_int,aux_proba_vis(:,ttt)/dt); hold on;
-        %     plot(prefs_int,rate_real_vis_aver(:,ttt),'r'); hold off;
-        %     axis(gca,[min(prefs_int) max(prefs_int) min(aux_proba_vis(:)/dt) max(aux_proba_vis(:)/dt)*2]);
-        title('Visual');
-        
-        % Target layer
-        subplot(2,2,4);
-        plot(prefs_lip,proba_target_tuning/dt); hold on;
-        plot(prefs_lip,rate_real_targ_aver(:,ttt),'r'); hold off;
-        axis(gca,[min(prefs_lip) max(prefs_lip) min(proba_target_tuning(:)/dt) max(proba_target_tuning(:)/dt)*2]);
-        title('Target');
-        
-        drawnow;
-    end
-end
-
-%}
-
-%% ====== Raster plot ======
-if if_debug
-    figure(90);
-    
-    subplot(4,3,[2 3]);
-    imagesc(ts,prefs_lip,rate_real_lip_aver*dt); axis xy;
-    ylabel('LIP');
-    title(sprintf('Firing prob. for each bin, averaged over %g trials, cond = %g, heading = %g',...
-        N_trial,unique_condition(to_plot_cond),unique_heading(to_plot_heading)));  colorbar
-    
-    subplot(4,3,[5 6]);
-    imagesc(ts,prefs_int,rate_real_int_aver*dt); axis xy; colorbar
-    ylabel('INTEGRATOR');
-    
-    subplot(4,3,[8 9]);
-    imagesc(ts,prefs_vest,rate_real_vest_aver*dt); axis xy; colorbar
-    ylabel('Vest');
-    
-    subplot(4,3,[11 12]);
-    imagesc(ts,prefs_vis,rate_real_vis_aver*dt); axis xy; colorbar
-    ylabel('Vis');
-    
-end
-%}
-
-% ====== Example Pref and Null traces ======
-%%{
-if if_debug || 1
-    set(figure(1002),'name','Example PSTHs'); clf;
-    set(gcf,'uni','norm','pos',[0.003       0.039       0.555       0.878]);
-    
-    for cc = 1:length(unique_condition)
-        % --- LIP ---
-        subplot(3,2,2*unique_condition(cc)-1);
-        
-        for trialtoplot = 1:ceil(N_trial/10):N_trial
-            plot(ts,rate_lip(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
-            plot(ts,rate_lip(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
-        end
-        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
-        axis tight;
-        
-        if if_bounded
-            plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
-            %         ylim([min(ylim),decis_thres(k)*1.1]);
-        end
-        
-        title(sprintf('rate\\_lip, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
-        
-        % --- Int ---
-        subplot(3,2,2*unique_condition(cc));
-        
-        for trialtoplot = 1:ceil(N_trial/10):N_trial
-            plot(ts,rate_int(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
-            plot(ts,rate_int(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
-        end
-        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
-        axis tight;
-        
-        %     if if_bounded
-        %         plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
-        % %         ylim([min(ylim),decis_thres*1.1]);
-        %     end
-        
-        title(sprintf('rate\\_int, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
-        
-        
-        %     subplot(3,2,2);
-        %     plot(ts,nanmean(rate_lip(right_targ_ind,:,:,to_plot_heading,cc),3)...
-        %         -nanmean(rate_lip(left_targ_ind,:,:,to_plot_heading,cc),3),'color',colors(unique_condition(cc),:),'linew',2);
-        %     hold on;
-        %     title(sprintf('averaged of all %g trials (correct + wrong), pref-null',N_trial));
-        %     axis tight;
-    end
-    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/example_8degree_%s.png',hostname));
-    
-    to_plot_heading  = 1; 
-    set(figure(1003),'name','Example PSTHs'); clf;
-    set(gcf,'uni','norm','pos',[0.003       0.039       0.555       0.878]);
-    
-    for cc = 1:length(unique_condition)
-        % --- LIP ---
-        subplot(3,2,2*unique_condition(cc)-1);
-        
-        for trialtoplot = 1:ceil(N_trial/10):N_trial
-            plot(ts,rate_lip(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
-            plot(ts,rate_lip(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
-        end
-        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
-        axis tight;
-        
-        if if_bounded
-            plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
-            %         ylim([min(ylim),decis_thres(k)*1.1]);
-        end
-        
-        title(sprintf('rate\\_lip, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
-        
-        % --- Int ---
-        subplot(3,2,2*unique_condition(cc));
-        
-        for trialtoplot = 1:ceil(N_trial/10):N_trial
-            plot(ts,rate_int(right_targ_ind,:,trialtoplot,to_plot_heading,cc),'color',colors(unique_condition(cc),:),'linewid',2); hold on;
-            plot(ts,rate_int(left_targ_ind,:,trialtoplot,to_plot_heading,cc),'--k','linewid',1);
-        end
-        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
-        axis tight;
-        
-        %     if if_bounded
-        %         plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
-        % %         ylim([min(ylim),decis_thres*1.1]);
-        %     end
-        
-        title(sprintf('rate\\_int, heading = %g, coh = %g',unique_heading(to_plot_heading),coherence));
-        
-        
-        %     subplot(3,2,2);
-        %     plot(ts,nanmean(rate_lip(right_targ_ind,:,:,to_plot_heading,cc),3)...
-        %         -nanmean(rate_lip(left_targ_ind,:,:,to_plot_heading,cc),3),'color',colors(unique_condition(cc),:),'linew',2);
-        %     hold on;
-        %     title(sprintf('averaged of all %g trials (correct + wrong), pref-null',N_trial));
-        %     axis tight;
-    end
-    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/example_0degree_%s.png',hostname));
-    
-end
-
-%}
-
-% ====== Behavior performance ======
-%%{
-figure(99); clf; hold on; axis([-8 8 0 1]);
-set(gcf,'name','Behavior','uni','norm','pos',[0.32       0.071       0.357        0.83]);
-
-% Psychometric
-for cc = 1:length(unique_condition)
-    subplot(2,1,1);
-
-    % Make decisions
-    rate_int_at_decision = squeeze(rate_lip(:,end,:,:,cc)); % Using lip
-    
-    [~, pos_max_rate_int_at_decision] = max(rate_int_at_decision,[],1);
-    choices{cc} = prefs_int(shiftdim(pos_max_rate_int_at_decision)) >= 0; % 1 = rightward, 0 = leftward
-    
-    % I just flip the psychometric curve to the negative headings
-    psychometric = [unique_heading' sum(reshape(choices{cc},[],length(unique_heading)),1)'/N_trial];
-    fake_psy = flipud(psychometric(unique_heading>0,:));
-    fake_psy(:,1) = -fake_psy(:,1);
-    fake_psy(:,2) = 1-fake_psy(:,2);
-    psychometric = [fake_psy ; psychometric];
-    
-    plot(psychometric(:,1),psychometric(:,2),'o','color',colors(unique_condition(cc),:),'markerfacecolor',colors(unique_condition(cc),:),'markersize',13); % Psychometric
-    hold on;
-    xxx = -max(unique_heading):0.1:max(unique_heading);
-    
-    [bias, threshold] = cum_gaussfit_max1(psychometric);
-    psycho(cc,:) = [bias,threshold];
-    plot(xxx,normcdf(xxx,bias,threshold),'-','color',colors(unique_condition(cc),:),'linewid',4);
-    
-    set(text(min(xlim),0.4+0.1*cc,sprintf('threshold = %g\n',threshold)),'color',colors(unique_condition(cc),:));
-    
-    % Chronometric
-    subplot(2,1,2);
-    for hh = 1:length(unique_heading)
-        select_correct = (choices{cc}(:,hh) == (unique_heading(hh)>=0)) | unique_heading(hh)== 0 ; % Only correct trials should be plotted in RT
-        
-        RT_this_cc_mean(hh,1) = mean(RT(select_correct,hh,cc),1);
-        RT_this_cc_se(hh,1) = std(RT(select_correct,hh,cc),[],1);
-        
-        RT_this_cc_mean_wrong(hh,1) = mean(RT(~select_correct,hh,cc),1);
-        RT_this_cc_se_wrong(hh,1) = std(RT(~select_correct,hh,cc),[],1);
-
-    end
-    
-    errorbar(unique_heading+(cc-2)*0.2,RT_this_cc_mean,RT_this_cc_se,'o-','color',colors(unique_condition(cc),:),...
-        'markerfacecolor',colors(unique_condition(cc),:),'markersize',10,'linew',2);
-    hold on;
-    errorbar(unique_heading+(cc-2)*0.2,RT_this_cc_mean_wrong,RT_this_cc_se_wrong,'o--','color',colors(unique_condition(cc),:),...
-        'markerfacecolor',colors(unique_condition(cc),:),'markersize',7,'linew',1);
-end
-
-subplot(2,1,2);
-plot(vel/max(vel)*max(xlim)/5,t_motion,'k--');
-title(sprintf('RT, all trials (correct), Bound = %s',num2str(decis_thres)));
-
-subplot(2,1,1);
-if length(unique_condition) == 3
-    pred_thres = (psycho(1,2)^(-2)+psycho(2,2)^(-2))^(-1/2);
-    set(text(min(xlim),0.4+0.1*(cc+1),sprintf('pred = %g\n',pred_thres)),'color','k');
-end
-
-export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/behavior_%s.png',hostname));
-%}
-
-%% ===== Averaged PSTH, different angles =====
-%%{
-
-PSTH_condition_absheading_choice = nan(length(ts),length(unique_condition),length(unique_heading),2);
-
-set(figure(435),'name','PSTH'); clf;
-set(gcf,'uni','norm','pos',[0.326       0.041       0.668       0.681]);
-% abs_unique_heading = unique(abs(unique_heading));
-sub_x = fix(sqrt(length(unique_heading)));
-sub_y = ceil(length(unique_heading)/sub_x);
-y_max = -inf; y_min = inf;
-
-for hh = 1:length(unique_heading)
-    
-    % == Raw PSTH (stim type), heading, correct only
-    figure(435); subplot(sub_x,sub_y,hh); hold on;
-    
-    for cc = 1:length(unique_condition)
-        
-        % I assume "PREF" = "LEFT" here. In this case, with headings [0 1 2 4 8], I
-        % plot the pref=90 neuron and the pref=-90 neuron in correct trials to simulate
-        % pref and null activity in correct only trials for each abs(heading) in my experiments.
-        select_correct = (choices{cc}(:,hh) == (unique_heading(hh)>=0));
-        
-        % Although note here the PREF and NULL activity become correlated.
-        PSTH_condition_absheading_choice(:,cc,hh,1) = squeeze(nanmean(rate_lip(right_targ_ind,:,select_correct,hh,cc),3));
-        PSTH_condition_absheading_choice(:,cc,hh,2) = squeeze(nanmean(rate_lip(left_targ_ind,:,select_correct,hh,cc),3));
-        
-        plot(ts,PSTH_condition_absheading_choice(:,cc,hh,1),'color',colors(unique_condition(cc),:),'linew',2.5);
-        plot(ts,PSTH_condition_absheading_choice(:,cc,hh,2),'--','color',colors(unique_condition(cc),:),'linew',2.5);
-        title(sprintf('abs(heading) = %g, %g trials, correct only',abs(unique_heading(hh)),N_trial));
-    end
-    
-    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
-    axis tight;
-    
-    if if_bounded
-        plot(xlim,[decis_thres(unique_condition(cc)) decis_thres(unique_condition(cc))],'c--');
-        %         ylim([min(ylim),decis_thres*1.1]);
-    end
-    
-    y_min = min(y_min,min(ylim));
-    y_max = max(y_max,max(ylim));
-    
-end
-
-set(findobj(435,'type','axes'),'ylim',[y_min y_max]);
-export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/PSTH_%s.png',hostname));
-
-% =====  Delta-PSTH (stim type), heading, correct only ====
-set(figure(436),'name','Delta PSTH'); clf;
-set(gcf,'uni','norm','pos',[0.326       0.041       0.668       0.681]);
-y_max = -inf; y_min = inf;
-
-for hh = 1:length(unique_heading)
-    
-    figure(436);  subplot(sub_x,sub_y,hh); hold on;
-    
-    for cc = 1:length(unique_condition)
-        plot(ts,PSTH_condition_absheading_choice(:,cc,hh,1)-PSTH_condition_absheading_choice(:,cc,hh,2),'color',colors(unique_condition(cc),:),'linew',2.5);
-    end
-    title(sprintf('abs(heading) = %g, %g trials, correct only',abs(unique_heading(hh)),N_trial));
-    
-    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
-    y_min = min(y_min,min(ylim));
-    y_max = max(y_max,max(ylim));
-    axis tight;
-end
-set(findobj(436,'type','axes'),'ylim',[y_min y_max]);
-export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/deltaPSTH_%s.png',hostname));
-
-%}
-
-total_time = toc(total_time)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Moved to AnalysisResult.m %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+AnalysisResult;
 
 
