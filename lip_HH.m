@@ -8,7 +8,6 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function lip_HH(para_override)
 
-total_time = tic;
 %clear
 %clear global
 
@@ -26,8 +25,14 @@ if strcmp(version('-release'),'2014b')    % ION cluster;
     end
     ION_cluster = 1;
 else % My own computer
-    if isempty(gcp('nocreate'))
-        parpool;
+    if strcmp(version('-release'),'2013a')
+        if matlabpool('size') == 0
+            matlabpool;
+        end
+    else
+        if isempty(gcp('nocreate'))
+            parpool;
+        end
     end
     ION_cluster = 0;
 end
@@ -42,18 +47,22 @@ if_debug = ~ION_cluster;
 % ============ Sizes ============
 % Input layers
 N_targets = 2; % Target input
-N_vis = 200; % Visual motion signal
-N_vest = 200; % Vestibular motion signal
+N_vis = 100; % Visual motion signal
+N_vest = 100; % Vestibular motion signal
 
 % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
 % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
 % which has a short time constant, keeps receiving target input but does not integrate it.
 % For most part of the code, I just rename the old "_lip" stuff to "_int"
-N_int = 200;
-N_lip = 200;  % Output layers (Real LIP layer)
+N_int = 400;
+N_lip = 400;  % Output layers (Real LIP layer)
 
 % ============ Times ============
-dt = 2e-3; % Size of time bin in seconds
+if ION_cluster
+    dt = 2e-3; % Size of time bin in seconds
+else 
+    dt = 5e-3;
+end
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
 motion_duration = 1.5; % in s
@@ -67,12 +76,12 @@ att_gain_stim_after_hit_bound = [0 0 0];
 
 % =============== Conditions ===============
 if ION_cluster
-    unique_heading = [0 1 2 4 8];
-    unique_condition = [1 2 3];
-    N_rep = 100; % For each condition
+    unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
+    unique_stim_type = [1 2 3];
+    N_rep = 20; % For each condition
 else
-    unique_heading = [0 8];
-    unique_condition = [3];
+    unique_heading = [-8 0 8];
+    unique_stim_type = [1 2 3];
     N_rep = 10;
 end
 
@@ -190,12 +199,6 @@ if nargin == 1
     end
 end
 
-% Pack all paras
-para_list = who;
-for i = 1:length(para_list)
-    paras.(para_list{i}) = eval(para_list{i});
-end
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Pure Parameters End %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -219,7 +222,6 @@ gain_func_along_vest = @(x) (1./(1+exp(-(abs(90-abs(90-abs(x))))/k_int_vest_alon
 % ---- Time related ---- 
 trial_dur_total_in_bins = round(trial_dur_total/dt); %% in time bins (including pre_trial_dur)
 stim_on_time_in_bins = stim_on_time/dt; % Time of motion start, in time bins.
-ts = ((0:trial_dur_total_in_bins-1)-stim_on_time_in_bins)*dt; % in s
 
 if stim_on_time_in_bins>trial_dur_total_in_bins
     error('pre_trial_dur cannot be longer than trial_dur');
@@ -243,6 +245,13 @@ if if_debug
     ylabel(h(1),'Velocity (m/s)');
     ylabel(h(2),'Acceleration (m^2/s)');
 end
+
+%%%%%%%%%%% Pack all paras %%%%%%%%%%%
+para_list = who;
+for i = 1:length(para_list)
+    paras.(para_list{i}) = eval(para_list{i});
+end
+
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Variable initialization (I moved here)
@@ -268,22 +277,22 @@ aux2_rate_int = zeros(N_int,trial_dur_total_in_bins+2);
 % for m = 1:if_test_set+1 % Train and Test
 
 %     % Raw data
-%     spikes_target = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-%     spikes_vis = zeros(N_vis,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-%     spikes_vest = zeros(N_vest,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+%     spikes_target = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+%     spikes_vis = zeros(N_vis,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+%     spikes_vest = zeros(N_vest,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
 %
-%     rate_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-%     spikes_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-%     rate_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-%     spikes_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+%     rate_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+%     spikes_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+%     rate_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+%     spikes_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
 
 % Spike count in sliding windows for Fisher information
-%     spikes_count_vis = nan(N_vis, fisher_N_window, N_trial,length(unique_heading),length(unique_condition));
-%     spikes_count_vest = nan(N_vest, fisher_N_window, N_trial,length(unique_heading),length(unique_condition));
-%     proba_count_int = nan(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_condition));
-%     spikes_count_int = nan(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_condition));
+%     spikes_count_vis = nan(N_vis, fisher_N_window, N_trial,length(unique_heading),length(unique_stim_type));
+%     spikes_count_vest = nan(N_vest, fisher_N_window, N_trial,length(unique_heading),length(unique_stim_type));
+%     proba_count_int = nan(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_stim_type));
+%     spikes_count_int = nan(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_stim_type));
 %     if shuffle_flag==1
-%         spikes_count_int_shuff = zeros(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_condition));
+%         spikes_count_int_shuff = zeros(N_int, fisher_N_window, N_trial, length(unique_heading),length(unique_stim_type));
 %     end
 
 % end
@@ -301,20 +310,20 @@ w_lip_lip = zeros(N_lip,N_lip);
 for nn=1:N_int
     
     % -- VIS->Int, Vest->Int --
-    %         w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(K_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-    %             .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-    %             + dc_w_int_vis/N_vis;   % Offset
-    %         w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(K_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-    %             .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-    %             + dc_w_int_vest/N_vest;   % Offset
+            w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+                .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+                + dc_w_int_vis/N_vis;   % Offset
+            w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+                .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+                + dc_w_int_vest/N_vest;   % Offset
     
     % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
-    w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-        .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
-        + dc_w_int_vis/N_vis;   % Offset
-    w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-        .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
-        + dc_w_int_vest/N_vest;   % Offset
+%     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+%         .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
+%         + dc_w_int_vis/N_vis;   % Offset
+%     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+%         .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
+%         + dc_w_int_vest/N_vest;   % Offset
     
     % -- Int->Int --
     %     w_int_int(nn,:) = g_w_int_int/N_int*...   %  Integrator recurrent
@@ -404,24 +413,24 @@ w_cov_vest = real(sqrtm(cov_vest));
 par_time = tic;
 
 % === To reduce the overheads, I put all conditions*heading*reps into a large matrix. HH20170417 ===
-[x,y]=meshgrid(1:length(unique_condition),1:length(unique_heading));
+[x,y]=meshgrid(1:length(unique_stim_type),1:length(unique_heading));
 z=[x(:) y(:)];
-cc_hh_cheatsheet = reshape(repmat(z,1,N_rep)',2,[])'; % All combinations of cc and hh
-n_parfor_loops = size(cc_hh_cheatsheet,1);
+ss_hh_cheatsheet = reshape(repmat(z,1,N_rep)',2,[])'; % All combinations of ss and hh
+n_parfor_loops = size(ss_hh_cheatsheet,1);
 
 proba_vis_for_each_heading = zeros(N_vis,length(unique_heading));
 proba_vest_for_each_heading = zeros(N_vest,length(unique_heading));
 
 % -- Data to save in parloop --
 % % Raw data
-% spikes_target = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-% spikes_vis = zeros(N_vis,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-% spikes_vest = zeros(N_vest,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+% spikes_target = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+% spikes_vis = zeros(N_vis,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+% spikes_vest = zeros(N_vest,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
 %
-% rate_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-% spikes_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-% rate_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
-% spikes_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_condition));
+% rate_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+% spikes_int = zeros(N_int,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+% rate_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
+% spikes_lip = zeros(N_lip,trial_dur_total_in_bins,N_trial,length(unique_heading),length(unique_stim_type));
 
 spikes_target = zeros(N_lip,trial_dur_total_in_bins,n_parfor_loops);
 spikes_vis = zeros(N_vis,trial_dur_total_in_bins,n_parfor_loops);
@@ -434,8 +443,7 @@ spikes_lip = zeros(N_lip,trial_dur_total_in_bins,n_parfor_loops);
 
 RT = (trial_dur_total-stim_on_time) * ones(n_parfor_loops,1);
 
-
-% --- Generate stuffs that are cc/hh- dependent --
+% --- Generate stuffs that are ss/hh- dependent --
 for hh = 1:length(unique_heading)  % Motion directions
     
     % ==== Not trial- or time- dependent stuffs ===
@@ -464,13 +472,13 @@ for hh = 1:length(unique_heading)  % Motion directions
     %         end
 end
 
-for cc = 1:length(unique_condition)
+for ss = 1:length(unique_stim_type)
     % === Some slicing stuffs necessary for parfor ===
-    att_gain_this = att_gain_stim_after_hit_bound(unique_condition(cc));
-    decis_thres_this = decis_thres(unique_condition(cc));
+    att_gain_this = att_gain_stim_after_hit_bound(unique_stim_type(ss));
+    decis_thres_this = decis_thres(unique_stim_type(ss));
 end
 
-% --- Generate other stuffs that are not cc/hh- dependent ---
+% --- Generate other stuffs that are not ss/hh- dependent ---
 % proba_targ: proba of firing of target neurons in response to visual targets
 % pos_targ = stim_this + [0:360/N_targets:359.9];
 pos_targ = [-90 90]; % Always these two for fine discrimination task. HH2017
@@ -488,8 +496,8 @@ parfor_progress(n_parfor_loops);
 parfor tt = 1:n_parfor_loops % For each trial
     
     % -- Get data from cheat sheet --
-    cond_this = cc_hh_cheatsheet(tt,:);
-    cc_this = cond_this(1);
+    cond_this = ss_hh_cheatsheet(tt,:);
+    ss_this = cond_this(1);
     hh_this = cond_this(2);
     
     % -- Target input spike train --
@@ -507,9 +515,9 @@ parfor tt = 1:n_parfor_loops % For each trial
         .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel))],N_vis,1);
     
     % -- Stimulus condition selection --
-    if cc_this == 1
+    if unique_stim_type(ss_this) == 1
         aux_proba_vis = 0*aux_proba_vis; % Shut down visual activity
-    elseif cc_this ==2
+    elseif unique_stim_type(ss_this) ==2
         aux_proba_vest = 0*aux_proba_vest; % Shut down vestibular activity
     end
     
@@ -524,21 +532,21 @@ parfor tt = 1:n_parfor_loops % For each trial
     k = 1;  % Time begins at the very beginning
     
     % -- Variables for this parfor loop --
-    rate_int_this = zeros(N_vis,trial_dur_total_in_bins);
-    rate_lip_this = zeros(N_vis,trial_dur_total_in_bins);
-    spikes_int_this = zeros(N_vis,trial_dur_total_in_bins);
-    spikes_lip_this = zeros(N_vis,trial_dur_total_in_bins);
+    rate_int_this = zeros(N_int,trial_dur_total_in_bins);
+    rate_lip_this = zeros(N_lip,trial_dur_total_in_bins);
+    spikes_int_this = zeros(N_int,trial_dur_total_in_bins);
+    spikes_lip_this = zeros(N_lip,trial_dur_total_in_bins);
     decision_ac = zeros(N_int,trial_dur_total_in_bins+2);
     
     while k<=trial_dur_total_in_bins-1
         
         % -- Update INTEGRATOR layer --
-        %                     rate_int(:,k+1,tt,hh,cc) = bias_int + (1-dt/time_const_int)*rate_int(:,k,tt,hh,cc)...   %  Self dynamics.  in Hz!
+        %                     rate_int(:,k+1,tt,hh,ss) = bias_int + (1-dt/time_const_int)*rate_int(:,k,tt,hh,ss)...   %  Self dynamics.  in Hz!
         %                         + 1/time_const_int * (...
-        %                               w_int_int * spikes_int(:,k,tt,hh,cc)... %  INTEGRATOR recurrent
-        %                             + att_gain_stim * w_int_vis * spikes_vis(:,k,tt,hh,cc)...     %  Visual input
-        %                             + att_gain_stim * w_int_vest * spikes_vest(:,k,tt,hh,cc)...     % Vestibular input
-        %                         ... % + att_gain_targ * w_int_targ * spikes_target(:,k,tt,hh,cc)...  % No longer here. HH20170317
+        %                               w_int_int * spikes_int(:,k,tt,hh,ss)... %  INTEGRATOR recurrent
+        %                             + att_gain_stim * w_int_vis * spikes_vis(:,k,tt,hh,ss)...     %  Visual input
+        %                             + att_gain_stim * w_int_vest * spikes_vest(:,k,tt,hh,ss)...     % Vestibular input
+        %                         ... % + att_gain_targ * w_int_targ * spikes_target(:,k,tt,hh,ss)...  % No longer here. HH20170317
         %                         );
         
         % Just let the INTEGRATOR to be ideal. (straight sum)
@@ -573,7 +581,7 @@ parfor tt = 1:n_parfor_loops % For each trial
             % Set the attention for motion stimuli to zero
             att_gain_stim = att_gain_this;
             RT(tt) = (k-stim_on_time_in_bins)*dt;
-            % last_proba(:,count) = rate_int(:,k,tt,hh,cc);
+            % last_proba(:,count) = rate_int(:,k,tt,hh,ss);
         end
         %                     end
         
@@ -594,31 +602,43 @@ parfor tt = 1:n_parfor_loops % For each trial
 end % of parfor trial
 parfor_progress(0);
 fprintf('\n');
+par_time = toc(par_time)
 
 % Reorganize data saved in parloop
-spikes_target = reshape(spikes_target,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
-spikes_vis= reshape(spikes_vis,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
-spikes_vest= reshape(spikes_vest,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
-spikes_int  = reshape(spikes_int,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
-spikes_lip  = reshape(spikes_lip,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
-rate_int = reshape(rate_int,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
-rate_lip = reshape(rate_lip,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_condition));
-RT = reshape(RT,N_rep,length(unique_heading),length(unique_condition));
+spikes_target = reshape(spikes_target,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
+spikes_vis= reshape(spikes_vis,N_vest,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
+spikes_vest= reshape(spikes_vest,N_vest,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
+spikes_int  = reshape(spikes_int,N_int,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
+spikes_lip  = reshape(spikes_lip,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
+rate_int = reshape(rate_int,N_int,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
+rate_lip = reshape(rate_lip,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
+RT = reshape(RT,N_rep,length(unique_heading),length(unique_stim_type));
 
-% Pack and save data
+% % Pack and save data
+% disp('Saving data...');
+% if if_debug
+%     save('./result/last_result.mat','paras','spikes_target','spikes_vis','spikes_vest','spikes_int','spikes_lip','rate_int','rate_lip','RT','-v7.3');
+% else
+%     save('./result/last_result.mat','paras','rate_lip','rate_int','RT','-v7.3');
+% end
+
 if if_debug
-    save last_result.mat paras spikes_target spikes_vis spikes_vest spikes_int spikes_lip rate_int rate_lip RT;
-else
-    save('./result/last_result.mat','paras','spikes_lip','RT','-v7.3');
+    assignin('base','rate_lip', rate_lip);
+    assignin('base','paras', paras);
+    assignin('base','rate_int', rate_int);
+    assignin('base','spikes_target', spikes_target);
+    assignin('base','spikes_vis', spikes_vis);
+    assignin('base','spikes_vest', spikes_vest);
+    assignin('base','spikes_int', spikes_int);
+    assignin('base','spikes_lip', spikes_lip);
+    assignin('base','proba_target_tuning', proba_target_tuning);
+    assignin('base','RT', RT);
 end
-
-% assignin('base','result', result);
-
-par_time = toc(par_time)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Moved to AnalysisResult.m %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+disp('Plot results...');
 AnalysisResult;
 
 
