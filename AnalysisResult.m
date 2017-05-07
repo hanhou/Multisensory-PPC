@@ -15,6 +15,7 @@ if ~exist('trial_dur_total_in_bins','var')  % Used in offline analysis
     for i = 1:length(para_list)
         eval([para_list{i} '= paras.' para_list{i} ';']);
     end
+
     if_debug = 0; % Override
 end
 
@@ -23,6 +24,10 @@ analysis_time = tic;
 ts = ((0:trial_dur_total_in_bins-1)-stim_on_time_in_bins)*dt; % in s
 colors = [0 0 1; 1 0 0; 0 0.8 0.4];
 LEFT = -1; RIGHT = 1;
+
+if ~exist('para_override_txt','var')
+    para_override_txt = '';
+end
 
 %% === Rectify rate_lip ===
 % I use rectified rate_lip because
@@ -162,6 +167,8 @@ if prefs_lip(to_plot_cell_ind)<0  % If this target cell has a negative pref head
     pref_null = fliplr(pref_null);
 end
 
+y_max = -inf; y_min = inf; to_sync = [];
+
 for tph = 1:length(to_plot_abs_headings)
 
     for ss = 1:length(unique_stim_type)
@@ -186,6 +193,8 @@ for tph = 1:length(to_plot_abs_headings)
                     plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1);
                     plot([RT_this RT_this],[rate_at_RT+5 rate_at_RT-5],'k','linew',5);
                 end
+                
+                axis tight; y_min = min(y_min,min(ylim)); y_max = max(y_max,max(ylim)); to_sync = [to_sync gca];
                 
                 % --- Int ---
                 axes(hs(6*(tph-1)+ss)+3);
@@ -220,22 +229,25 @@ for tph = 1:length(to_plot_abs_headings)
     
 end
 
+set(to_sync,'ylim',[y_min y_max]);
+
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/example_%s.png',hostname));
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/Example%s.png',para_override_txt));
+    saveas(gcf,sprintf('./result/Example%s',para_override_txt),'fig');
 end
 
 disp('Example done');
 
 %}
 
-%% ====== Behavior performance ======
-%%{
+%% ====== Fig.2 Overview ======
 figure(1000); clf;
 set(gcf,'name','Overview');
 set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
 
 hs = tight_subplot(3,4,0.05);
 
+% ======= Behavior ========
 % Psychometric
 for ss = 1:length(unique_stim_type)
         
@@ -298,30 +310,46 @@ end
 % ===== Averaged PSTH, different angles =====
 %%{
 
-to_calculate_PSTH_cells_ind = [right_targ_ind left_targ_ind];   
-to_plot_PSTH = 1;
+to_calculate_PSTH_cells_ind = [right_targ_ind-20:5:right_targ_ind+20 left_targ_ind-20:5:left_targ_ind+20];   
+N_sample_cell = length(to_calculate_PSTH_cells_ind);
+% to_plot_grouped_PSTH = find(to_calculate_PSTH_cells_ind == right_targ_ind);
+to_plot_grouped_PSTH = 1:N_sample_cell; % Group all calculated cells
 
 to_flip = prefs_lip(to_calculate_PSTH_cells_ind) < 0;
-PSTH_correct_mean_headings = nan(length(to_calculate_PSTH_cells_ind),length(ts),length(unique_stim_type),length(unique_abs_heading),2);
-PSTH_correct_mean_allheading = nan(length(to_calculate_PSTH_cells_ind),length(ts),length(unique_stim_type),2);
+PSTH_correct_mean_headings = nan(N_sample_cell,length(ts),length(unique_stim_type),length(unique_abs_heading),2);
+PSTH_correct_mean_allheading = nan(N_sample_cell,length(ts),length(unique_stim_type),2);
 pref_null = [RIGHT LEFT];
 
 % === Group PSTH data ===
+
 for ss = 1:length(unique_stim_type)
+    
+    zu_all{ss} = []; % Cache for VarCE
+    
     for cc = 1:2 % Pref and Null
         PSTH_cache = [];
-        % Different headings
-        for abshh = 1:length(unique_abs_heading)
+        
+        for abshh = 1:length(unique_abs_heading)         % For different abs(headings)
             % Assuming PREF = RIGHT for all the cells
             this_heading_ind = find(unique_heading == unique_abs_heading(abshh) * pref_null(cc),1);
             this_correct_ind = find(choices(:,this_heading_ind,ss) == pref_null(cc)); % Only correct trials
             
+            % PSTH separated for each heading
             PSTH_correct_raw_this = rate_lip(to_calculate_PSTH_cells_ind,:,this_correct_ind,this_heading_ind,ss);
             PSTH_correct_mean_headings(:,:,ss,abshh,cc) = mean(PSTH_correct_raw_this,3);
+            
+            % PSTH grouped cache for all headings
             PSTH_cache = cat(3,PSTH_cache,PSTH_correct_raw_this);
+
+            % For VarCE: all choice
+            if ~(unique_abs_heading(abshh)==0 && cc==2) % Skip abs(heading) = 0 and cc = 2 because cc = 1 already includes all trials for 0 heading
+                PSTH_all_raw_this_forVarCE = rate_lip(to_calculate_PSTH_cells_ind,:,:,this_heading_ind,ss);
+                zu_this = bsxfun(@minus, PSTH_all_raw_this_forVarCE, mean(PSTH_all_raw_this_forVarCE,3));
+                zu_all{ss} = cat(3,zu_all{ss},zu_this);
+            end
         end
         
-        % All headings
+        % PSTH for all headings
         PSTH_correct_mean_allheading(:,:,ss,cc) = mean(PSTH_cache,3);
     
     end
@@ -330,12 +358,15 @@ end
 PSTH_correct_mean_headings(to_flip,:,:,:,:) = flip(PSTH_correct_mean_headings(to_flip,:,:,:,:),5);
 PSTH_correct_mean_allheading(to_flip,:,:,:) = flip(PSTH_correct_mean_allheading(to_flip,:,:,:),4);
 
-% Plotting
+diff_PSTH_correct_mean_headings = - diff(PSTH_correct_mean_headings,[],5);
+diff_PSTH_correct_mean_allheading = - diff(PSTH_correct_mean_allheading,[],4);
+
+% -- Plotting --
 y_max = -inf; y_min = inf;
 colors_hue = [240 0 120]/360;
 
 for ss = 1:length(unique_stim_type)
-    yyy = squeeze(reshape(PSTH_correct_mean_headings(to_plot_PSTH,:,ss,:,:),1,[],1,length(unique_abs_heading)*2));
+    yyy = squeeze(reshape(mean(PSTH_correct_mean_headings(to_plot_grouped_PSTH,:,ss,:,:),1),1,[],1,length(unique_abs_heading)*2));
     yyy = shiftdim(yyy,-1);
     
     colors_angles_hsv(:,2) = linspace(0.2,1,length(unique_abs_heading));
@@ -350,10 +381,14 @@ for ss = 1:length(unique_stim_type)
     legend off;
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
 
+    axis tight;
     y_min = min(y_min,min(ylim));
     y_max = max(y_max,max(ylim));
     xlim([min(ts),max(ts)]);
 end
+
+% title(hs(4),sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(to_plot_grouped_PSTH))));
+title(hs(4),sprintf('Grouped %g cells',length(to_plot_grouped_PSTH)));
 
 set(hs(4:6),'ylim',[y_min y_max]);
 
@@ -365,37 +400,100 @@ for abshh = 1:length(unique_abs_heading)
     axes(hs(6+abshh)); hold on;
     
     for ss = 1:length(unique_stim_type)
-        plot(ts,PSTH_correct_mean_headings(to_plot_PSTH,:,ss,abshh,1)-PSTH_correct_mean_headings(to_plot_PSTH,:,ss,abshh,2),...
-            'color',colors(unique_stim_type(ss),:),'linew',2.5);
+        plot(ts,mean(diff_PSTH_correct_mean_headings(to_plot_grouped_PSTH,:,ss,abshh),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
     end
+    plot(ts,mean(sum(diff_PSTH_correct_mean_headings(to_plot_grouped_PSTH,:,[1 2],abshh),3),1),'k--');
     title(sprintf('|heading| = %g',unique_abs_heading(abshh)));
     
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+    axis tight;
     y_min = min(y_min,min(ylim));
     y_max = max(y_max,max(ylim));
-    axis tight;
 end
 
 % ======= Delta-PSTH, all heading, correct only =====
-axes(hs(12)); hold on;
-for ss = 1:length(unique_stim_type)
-    plot(ts,PSTH_correct_mean_allheading(to_plot_PSTH,:,ss,1)-PSTH_correct_mean_allheading(to_plot_PSTH,:,ss,2),...
-        'color',colors(unique_stim_type(ss),:),'linew',2.5);
-    title('All headings');
-end
+axes(hs(12)); hold on;    title('All headings');
 
+for ss = 1:length(unique_stim_type)
+    plot(ts,mean(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+end
+plot(ts,mean(sum(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,[1 2]),3),1),'k--');
+plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+
+axis tight;
 y_min = min(y_min,min(ylim));
 y_max = max(y_max,max(ylim));
-axis tight;
 
 set(hs(7:12),'ylim',[y_min y_max]);
 
-if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/Overview_%s.png',hostname));
-end
-disp(' done');
 
-%}
+% ====== VarCE ======
+axes(hs(3)); hold on; title('VarCE');
+
+for ss = 1:length(unique_stim_type)
+    plot(ts,mean(var(zu_all{ss}(to_plot_grouped_PSTH,:,:)*0.06,[],3),1),...  % 60 ms spike counting window in Ann's paper
+        'color',colors(unique_stim_type(ss),:),'linew',2.5);
+end
+plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+xlim([min(ts),max(ts)]);
+
+
+if ION_cluster
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/Overview%s.png',para_override_txt));
+    saveas(gcf,sprintf('./result/Overview%s',para_override_txt),'fig');
+end
+disp('Overview done');
+
+%% ====== Fig.3 Different cells ======
+
+figure(1002); clf;
+set(gcf,'name','Different cells');
+set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
+
+% -- diff_PSTH for all headings --
+m = fix(sqrt(N_sample_cell+1));
+n = ceil((N_sample_cell+1)/m);
+[~,hs] = tight_subplot(m,n,0.05);
+y_max = -inf; y_min = inf;
+
+for cc = 1:N_sample_cell
+    axes(hs(cc)); hold on;
+    for ss = 1:length(unique_stim_type)
+        plot(ts,diff_PSTH_correct_mean_allheading(cc,:,ss),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+    end
+    plot(ts,sum(diff_PSTH_correct_mean_allheading(cc,:,[1 2]),3),'k--');
+    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+    
+    axis tight;
+    y_min = min(y_min,min(ylim));
+    y_max = max(y_max,max(ylim));
+    
+    title(sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(cc))));
+end
+
+set(hs,'ylim',[y_min y_max]);
+
+% -- Raster plot of multisensory enhancement --
+axes(hs(end));
+comb_minus_vest = mean(diff_PSTH_correct_mean_allheading(:,:,3)-diff_PSTH_correct_mean_allheading(:,:,1),2);
+comb_minus_vis = mean(diff_PSTH_correct_mean_allheading(:,:,3)-diff_PSTH_correct_mean_allheading(:,:,2),2);
+plot(comb_minus_vest,comb_minus_vis,'og','markersize',7,'markerfacecol','g'); hold on;
+xlabel('Comb - Vest'); ylabel('Comb - Vis');
+max_axis = max(abs([ylim xlim]));
+plot([0 0],[-max_axis max_axis],'--k');
+plot([-max_axis max_axis],[0 0],'--k');
+plot([-max_axis max_axis],[-max_axis max_axis],'--k');
+axis tight square;
+
+
+if ION_cluster
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/Cells%s.png',para_override_txt));
+    saveas(gcf,sprintf('./result/Cells%s',para_override_txt),'fig');
+end
+disp('Different cells done');
+
+
+%%
 
 analysis_time = toc(analysis_time)
 disp('---- All done ----')

@@ -73,7 +73,7 @@ if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reacti
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
 
 % Smoothed max
-decis_thres = 34*[1 1 1+3/34]; % bound height, for different conditions
+decis_thres = 26*[1 1 1+8/29]; % bound height, for different conditions
 % Smoothed diff
 % decis_thres = 13*[1 1 1+2/13]; % bound height, for different conditions
 
@@ -191,12 +191,14 @@ bias_lip = 0;
 threshold_lip = 0.0;
 
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
+para_override_txt = '';
 if nargin == 1
     len = size(para_override,1);
     for ll = 1:len
         if exist(para_override{ll,1},'var')
             eval([para_override{ll,1} '= para_override{ll,2};']);
             fprintf('Overriding %s = %s...\n',para_override{ll,1},num2str(para_override{ll,2}));
+            para_override_txt = [para_override_txt sprintf('_%s_%s',para_override{ll,1}(1:5),num2str(para_override{ll,2}))];
         else
             fprintf('Parameter ''%s'' not found...\n',para_override{ll,1});
         end
@@ -314,20 +316,20 @@ w_lip_lip = zeros(N_lip,N_lip);
 for nn=1:N_int
     
     % -- VIS->Int, Vest->Int --
-    w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-        .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-        + dc_w_int_vis/N_vis;   % Offset
-    w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-        .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-        + dc_w_int_vest/N_vest;   % Offset
-    
-    % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
-    %     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-%         .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
+%     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+%         .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
 %         + dc_w_int_vis/N_vis;   % Offset
 %     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-%         .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
+%         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
 %         + dc_w_int_vest/N_vest;   % Offset
+    
+    % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
+    w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+        .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
+        + dc_w_int_vis/N_vis;   % Offset
+    w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+        .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
+        + dc_w_int_vest/N_vest;   % Offset
     
     % -- Int->Int --
     %     w_int_int(nn,:) = g_w_int_int/N_int*...   %  Integrator recurrent
