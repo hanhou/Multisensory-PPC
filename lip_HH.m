@@ -47,19 +47,19 @@ if_debug = ~ION_cluster;
 % ============ Sizes ============
 % Input layers
 N_targets = 2; % Target input
-N_vis = 100; % Visual motion signal
-N_vest = 100; % Vestibular motion signal
+N_vis = 300; % Visual motion signal
+N_vest = 300; % Vestibular motion signal
 
 % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
 % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
 % which has a short time constant, keeps receiving target input but does not integrate it.
 % For most part of the code, I just rename the old "_lip" stuff to "_int"
-N_int = 400;
-N_lip = 400;  % Output layers (Real LIP layer)
+N_int = 300;
+N_lip = 300;  % Output layers (Real LIP layer)
 
 % ============ Times ============
 if ION_cluster
-    dt = 2e-3; % Size of time bin in seconds
+    dt = 5e-3; % Size of time bin in seconds
 else 
     dt = 5e-3;
 end
@@ -71,18 +71,23 @@ motion_duration = 1.5; % in s
 if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
 % f_bound = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
-decis_thres = 30*[1 1 1+6/30]; % bound height, for different conditions
+
+% Smoothed max
+decis_thres = 34*[1 1 1+3/34]; % bound height, for different conditions
+% Smoothed diff
+% decis_thres = 13*[1 1 1+2/13]; % bound height, for different conditions
+
 att_gain_stim_after_hit_bound = [0 0 0];
 
 % =============== Conditions ===============
 if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     unique_stim_type = [1 2 3];
-    N_rep = 20; % For each condition
+    N_rep = 100; % For each condition
 else
     unique_heading = [-8 0 8];
     unique_stim_type = [1 2 3];
-    N_rep = 10;
+    N_rep = 5;
 end
 
 % =================== Stimuli ===================
@@ -100,13 +105,13 @@ K_cov_vis = 2;
 var_vis = 1e-5;
 
 % Vestibular
-equivalent_conherence = 12;
-r_spont_vest = 10;
-b_pref_vest = 1.7;
-b_null_vest = -0.2;
-K_vest = 1.5;
-K_cov_vest = 2;
-var_vest = 1e-5;
+equivalent_conherence = coherence;
+r_spont_vest = r_spont_vis;
+b_pref_vest = b_pref_vis;
+b_null_vest = b_null_vis;
+K_vest = K_vis;
+K_cov_vest = K_cov_vis;
+var_vest = var_vis;
 
 % Parameters for MT from Mazurek and Shadlen, except width.
 % K_cov_mt and var_mt controls the correlations.
@@ -121,7 +126,7 @@ var_vest = 1e-5;
 % var_vis = 1e-5;
 
 % Parameter of the activity evoked by the visual targets
-max_rate_target = 42; %% in Hz
+max_rate_target = 30; %% in Hz
 b_target = 0;
 K_target = 4;
 slope_norm_target=0.5;
@@ -138,8 +143,8 @@ time_const_int = 10000e-3; % in s
 time_const_lip = 100e-3; % in s
 
 % ---- Visual to INTEGRATOR ----
-g_w_int_vis = 7;
-dc_w_int_vis = -0;
+g_w_int_vis = 10;
+dc_w_int_vis = 0;
 k_int_vis = 5; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider
 
@@ -150,9 +155,9 @@ k_int_vest = k_int_vis;
 k_int_vest_along_vest = k_int_vis_along_vis;
 
 % ----- Targets to LIP ------
-g_w_lip_targ= 10;
+g_w_lip_targ= 8;
 k_lip_targ= 5;
-att_gain_targ = 0.7; % Drop in attention to visual target once motion stimulus appears.
+att_gain_targ = 1; % Drop in attention to visual target once motion stimulus appears.
 
 % % ------- Recurrent connectivity in INTEGRATOR --------
 % g_w_int_int = 35;
@@ -161,29 +166,28 @@ att_gain_targ = 0.7; % Drop in attention to visual target once motion stimulus a
 %
 % amp_I_int = 0;  % Mexico hat shape
 % K_int_I = 2;
-%
+% bias_int = 0;
 % Input-output function of INTEGRATOR
-bias_int = 0;
 threshold_int = 0.0;
 
 % ----- INTEGRATOR to the real LIP ----
-g_w_lip_int = 12;
+g_w_lip_int = 20;
 k_lip_int = 5;
-dc_w_lip_int = -4.3;
+dc_w_lip_int = -7;
 
 amp_I_lip_int = 0;  % Mexico hat shape
 k_lip_int_I = 2;
 
 % ----- LIP recurrent connection ------
-g_w_lip_lip = 15;
-k_lip_lip = 20;
-dc_w_lip_lip = -11;
+g_w_lip_lip = 5;
+k_lip_lip = 5;
+dc_w_lip_lip = -3;
 
 amp_I_lip = 0;  % Mexico hat shape
 k_lip_I = 2;
+bias_lip = 0;
 
 % Input-output function of LIP
-bias_lip = 0;
 threshold_lip = 0.0;
 
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
@@ -310,15 +314,15 @@ w_lip_lip = zeros(N_lip,N_lip);
 for nn=1:N_int
     
     % -- VIS->Int, Vest->Int --
-            w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-                .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-                + dc_w_int_vis/N_vis;   % Offset
-            w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-                .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-                + dc_w_int_vest/N_vest;   % Offset
+    w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+        .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+        + dc_w_int_vis/N_vis;   % Offset
+    w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+        .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+        + dc_w_int_vest/N_vest;   % Offset
     
     % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
-%     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+    %     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
 %         .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
 %         + dc_w_int_vis/N_vis;   % Offset
 %     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
@@ -488,7 +492,10 @@ for nn=1:N_targets
         exp(K_target*(cos((prefs_lip'-pos_targ(nn))/360*2*pi)-1))+b_target)*dt;
 end
 proba_target_tuning = proba_target_tuning/(slope_norm_target*(N_targets/2)+dc_norm_target);   %  Divisive normalization
+
 aux_proba_target = proba_target_tuning*ones(1,trial_dur_total_in_bins); % Expand along the time axis
+
+aux_proba_target(:,1:round(stim_on_time/dt)) = 1.7*aux_proba_target(:,1:round(stim_on_time/dt)); % Saliency of target
 
 %% == Now I only have to call parfor for just one time. ==
 parfor_progress(n_parfor_loops);
@@ -574,10 +581,14 @@ parfor tt = 1:n_parfor_loops % For each trial
         %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out(:,k));
         
         % -- Termination --
-        if if_bounded && k*dt>stim_on_time && att_gain_stim == 1 ...
-                ... && (max(decision_ac(:,k+1)) > decis_thres_this)
-                && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...
+        if if_bounded && k*dt > stim_on_time + 0.5 && att_gain_stim == 1 ...
+                ... && (max(decision_ac(:,k+1)) > decis_thres_this)   % Only Max
+                && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
                 mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this
+                ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
+                ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this
+            
+            
             % Set the attention for motion stimuli to zero
             att_gain_stim = att_gain_this;
             RT(tt) = (k-stim_on_time_in_bins)*dt;

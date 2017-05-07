@@ -149,12 +149,13 @@ choices = sign((prefs_lip(shiftdim(readout_lip_at_decision)) >= 0) -0.5); % choi
 %% ====== Example Pref and Null traces (correct only) ======
 %%{
 
-to_plot_abs_headings = [0 8];
+to_plot_abs_headings = [0 4 8];
 to_plot_cell_ind = right_targ_ind;  % Cell-based plotting
 n_to_plot_trace = 5;
 
 set(figure(1001),'name','Example PSTHs (correct only)'); clf;
-set(gcf,'uni','norm','pos',[0.005       0.056       0.937       0.832]);
+set(gcf,'uni','norm','pos',[0.005       0.056       0.33*length(to_plot_abs_headings)       0.832]);
+hs = tight_subplot(3,2*length(to_plot_abs_headings),[0.04 0.03]);
 
 pref_null = [RIGHT LEFT]; % Default: PREF = RIGHT, NULL = LEFT
 if prefs_lip(to_plot_cell_ind)<0  % If this target cell has a negative pref heading
@@ -176,7 +177,7 @@ for tph = 1:length(to_plot_abs_headings)
                 rate_at_RT = rate_lip(to_plot_cell_ind,find(ts<=RT_this,1,'last'),this_correct_ind(tt),this_heading_ind,ss);
                 
                 % --- LIP ---
-                subplot(3,4,1+4*(unique_stim_type(ss)-1)+2*(tph-1));
+                axes(hs(6*(tph-1)+ss));
                 
                 if cc == 1 % Pref
                     plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
@@ -187,7 +188,7 @@ for tph = 1:length(to_plot_abs_headings)
                 end
                 
                 % --- Int ---
-                subplot(3,4,1+4*(unique_stim_type(ss)-1)+2*(tph-1)+1);
+                axes(hs(6*(tph-1)+ss)+3);
                 if cc == 1 % Pref
                     plot(ts,rate_int(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
                 else
@@ -201,7 +202,7 @@ for tph = 1:length(to_plot_abs_headings)
             end
         end
         
-        subplot(3,4,1+4*(unique_stim_type(ss)-1)+2*(tph-1));
+        axes(hs(6*(tph-1)+ss));
         title(sprintf('rate\\_lip, pref = %g, |heading| = %g',prefs_lip(to_plot_cell_ind), to_plot_abs_headings(tph)));
         plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
         axis tight;
@@ -210,7 +211,7 @@ for tph = 1:length(to_plot_abs_headings)
             %         ylim([min(ylim),decis_thres(k)*1.1]);
         end
         
-        subplot(3,4,1+4*(unique_stim_type(ss)-1)+2*(tph-1)+1);   
+        axes(hs(6*(tph-1)+ss)+3);
         title(sprintf('rate\\_int'));
         plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
         axis tight;
@@ -258,6 +259,7 @@ for ss = 1:length(unique_stim_type)
     axis([-8.5 8.5 0 1]);
 
     set(text(min(xlim),0.6+0.06*ss,sprintf('threshold = %g\n',threshold)),'color',colors(unique_stim_type(ss),:));
+    title(sprintf('N_{reps} = %g',N_rep));
     
     % Chronometric
     axes(hs(2));
