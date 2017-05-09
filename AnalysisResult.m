@@ -232,8 +232,8 @@ end
 set(to_sync,'ylim',[y_min y_max]);
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/Example%s.png',para_override_txt));
-    saveas(gcf,sprintf('./result/Example%s',para_override_txt),'fig');
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/1_Example%s.png',para_override_txt));
+    saveas(gcf,sprintf('./result/1_Example%s.fig',para_override_txt),'fig');
 end
 
 disp('Example done');
@@ -439,8 +439,8 @@ xlim([min(ts),max(ts)]);
 
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/Overview%s.png',para_override_txt));
-    saveas(gcf,sprintf('./result/Overview%s',para_override_txt),'fig');
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/2_Overview%s.png',para_override_txt));
+    saveas(gcf,sprintf('./result/2_Overview%s.fig',para_override_txt),'fig');
 end
 disp('Overview done');
 
@@ -487,8 +487,8 @@ axis tight square;
 
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/Cells%s.png',para_override_txt));
-    saveas(gcf,sprintf('./result/Cells%s',para_override_txt),'fig');
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/3_Cells%s.png',para_override_txt));
+    saveas(gcf,sprintf('./result/3_Cells%s.fig',para_override_txt),'fig');
 end
 disp('Different cells done');
 

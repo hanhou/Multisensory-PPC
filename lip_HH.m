@@ -6,7 +6,7 @@
 % lip_HH(para_override)
 % para_override: {'name1',value1; 'name2',value2, ...}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function lip_HH(para_override)
+function result = lip_HH(para_override,output_result)
 
 %clear
 %clear global
@@ -73,7 +73,10 @@ if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reacti
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
 
 % Smoothed max
-decis_thres = 26*[1 1 1+8/29]; % bound height, for different conditions
+decis_thres = 35*[1 1 1+0/35]; % bound height, for different conditions
+
+%  decis_thres = 40*[1 1 1+8/29]; % bound height, for different conditions
+ 
 % Smoothed diff
 % decis_thres = 13*[1 1 1+2/13]; % bound height, for different conditions
 
@@ -83,7 +86,7 @@ att_gain_stim_after_hit_bound = [0 0 0];
 if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     unique_stim_type = [1 2 3];
-    N_rep = 100; % For each condition
+    N_rep = 50; % For each condition
 else
     unique_heading = [-8 0 8];
     unique_stim_type = [1 2 3];
@@ -104,14 +107,6 @@ K_vis = 1.5;
 K_cov_vis = 2;
 var_vis = 1e-5;
 
-% Vestibular
-equivalent_conherence = coherence;
-r_spont_vest = r_spont_vis;
-b_pref_vest = b_pref_vis;
-b_null_vest = b_null_vis;
-K_vest = K_vis;
-K_cov_vest = K_cov_vis;
-var_vest = var_vis;
 
 % Parameters for MT from Mazurek and Shadlen, except width.
 % K_cov_mt and var_mt controls the correlations.
@@ -145,14 +140,8 @@ time_const_lip = 100e-3; % in s
 % ---- Visual to INTEGRATOR ----
 g_w_int_vis = 10;
 dc_w_int_vis = 0;
-k_int_vis = 5; % Larger, narrower
+k_int_vis = 4; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider
-
-% ---- Vestibular to INTEGRATOR ----
-g_w_int_vest = g_w_int_vis;
-dc_w_int_vest = dc_w_int_vis;
-k_int_vest = k_int_vis;
-k_int_vest_along_vest = k_int_vis_along_vis;
 
 % ----- Targets to LIP ------
 g_w_lip_targ= 8;
@@ -171,9 +160,9 @@ att_gain_targ = 1; % Drop in attention to visual target once motion stimulus app
 threshold_int = 0.0;
 
 % ----- INTEGRATOR to the real LIP ----
-g_w_lip_int = 20;
+g_w_lip_int = 15;
 k_lip_int = 5;
-dc_w_lip_int = -7;
+dc_w_lip_int = -4.5;
 
 amp_I_lip_int = 0;  % Mexico hat shape
 k_lip_int_I = 2;
@@ -192,7 +181,7 @@ threshold_lip = 0.0;
 
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
 para_override_txt = '';
-if nargin == 1
+if nargin >= 1
     len = size(para_override,1);
     for ll = 1:len
         if exist(para_override{ll,1},'var')
@@ -213,6 +202,23 @@ end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Some preparation (after the pure parameter session in case some paras are overriden)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% ---- Some weights ---
+% Vestibular
+equivalent_conherence = coherence;
+r_spont_vest = r_spont_vis;
+b_pref_vest = b_pref_vis;
+b_null_vest = b_null_vis;
+K_vest = K_vis;
+K_cov_vest = K_cov_vis;
+var_vest = var_vis;
+
+% ---- Vestibular to INTEGRATOR ----
+g_w_int_vest = g_w_int_vis;
+dc_w_int_vest = dc_w_int_vis;
+k_int_vest = k_int_vis;
+k_int_vest_along_vest = k_int_vis_along_vis;
+
 
 % ---- Network related ---- 
 prefs_vis = linspace(-180,180,N_vis);
@@ -316,20 +322,20 @@ w_lip_lip = zeros(N_lip,N_lip);
 for nn=1:N_int
     
     % -- VIS->Int, Vest->Int --
-%     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-%         .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-%         + dc_w_int_vis/N_vis;   % Offset
-%     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-%         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-%         + dc_w_int_vest/N_vest;   % Offset
-    
-    % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-        .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
+        .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
         + dc_w_int_vis/N_vis;   % Offset
     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-        .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
+        .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
         + dc_w_int_vest/N_vest;   % Offset
+    
+    % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
+%     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+%         .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
+%         + dc_w_int_vis/N_vis;   % Offset
+%     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+%         .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
+%         + dc_w_int_vest/N_vest;   % Offset
     
     % -- Int->Int --
     %     w_int_int(nn,:) = g_w_int_int/N_int*...   %  Integrator recurrent
@@ -480,8 +486,8 @@ end
 
 for ss = 1:length(unique_stim_type)
     % === Some slicing stuffs necessary for parfor ===
-    att_gain_this = att_gain_stim_after_hit_bound(unique_stim_type(ss));
-    decis_thres_this = decis_thres(unique_stim_type(ss));
+    att_gain_this(ss) = att_gain_stim_after_hit_bound(unique_stim_type(ss));
+    decis_thres_this(ss) = decis_thres(unique_stim_type(ss));
 end
 
 % --- Generate other stuffs that are not ss/hh- dependent ---
@@ -586,13 +592,13 @@ parfor tt = 1:n_parfor_loops % For each trial
         if if_bounded && k*dt > stim_on_time + 0.5 && att_gain_stim == 1 ...
                 ... && (max(decision_ac(:,k+1)) > decis_thres_this)   % Only Max
                 && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
-                mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this
+                mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
                 ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
-                ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this
+                ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
             
             
             % Set the attention for motion stimuli to zero
-            att_gain_stim = att_gain_this;
+            att_gain_stim = att_gain_this(ss_this);
             RT(tt) = (k-stim_on_time_in_bins)*dt;
             % last_proba(:,count) = rate_int(:,k,tt,hh,ss);
         end
@@ -653,5 +659,14 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 disp('Plot results...');
 AnalysisResult;
+
+%% Save result
+if nargin == 2 % Save result
+    for rr = 1:length(output_result)
+        eval(['result.(output_result{rr}) =' output_result{rr}]);
+    end
+else
+    result =[];
+end
 
 
