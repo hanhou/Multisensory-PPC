@@ -47,20 +47,20 @@ if_debug = ~ION_cluster;
 % ============ Sizes ============
 % Input layers
 N_targets = 2; % Target input
-N_vis = 300; % Visual motion signal
-N_vest = 300; % Vestibular motion signal
+N_vis = 200; % Visual motion signal
+N_vest = 200; % Vestibular motion signal
 
 % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
 % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
 % which has a short time constant, keeps receiving target input but does not integrate it.
 % For most part of the code, I just rename the old "_lip" stuff to "_int"
-N_int = 300;
-N_lip = 300;  % Output layers (Real LIP layer)
+N_int = 200;
+N_lip = 200;  % Output layers (Real LIP layer)
 
 % ============ Times ============
 if ION_cluster
     dt = 5e-3; % Size of time bin in seconds
-else 
+else
     dt = 5e-3;
 end
 trial_dur_total = 1.7; % in s
@@ -73,7 +73,7 @@ if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reacti
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
 
 % Smoothed max
-decis_thres = 34*[1 1 1] + 2*[0 0 1]; % bound height, for different conditions
+decis_thres = 32*[1 1 1] + 2.5*[0 0 1]; % bound height, for different conditions
 
 %  decis_thres = 40*[1 1 1+8/29]; % bound height, for different conditions
  
@@ -86,7 +86,7 @@ att_gain_stim_after_hit_bound = [0 0 0];
 if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     unique_stim_type = [1 2 3];
-    N_rep = 100; % For each condition
+    N_rep = 200; % For each condition
 else
     unique_heading = [-8 0 8];
     unique_stim_type = [1 2 3];
@@ -130,7 +130,7 @@ dc_norm_target = 0.5;
 % Gains
 % Maybe should be set such that gain_vis:gain_vest = (integral of abs(a))/(integral of v)
 gain_vel_vis = 7; % (m/s)^-1
-gain_acc_vest = 2; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
+gain_acc_vest = 2.6; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
 
 % =================== Network configuration ===================
 % -- Time constant for integration
@@ -161,15 +161,15 @@ threshold_int = 0.0;
 
 % ----- INTEGRATOR to the real LIP ----
 g_w_lip_int = 15;
-k_lip_int = 5;
-dc_w_lip_int = -4.5;
+k_lip_int = 10;
+dc_w_lip_int = -3.6;
 
 amp_I_lip_int = 0;  % Mexico hat shape
 k_lip_int_I = 2;
 
 % ----- LIP recurrent connection ------
 g_w_lip_lip = 5;
-k_lip_lip = 5;
+k_lip_lip = 10;
 dc_w_lip_lip = -3;
 
 amp_I_lip = 0;  % Mexico hat shape

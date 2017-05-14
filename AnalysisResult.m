@@ -41,7 +41,7 @@ rate_lip(rate_lip<0) = 0;
 if if_debug
     
     win_wid = 100e-3; % in s
-    win_step = 10e-3;
+    win_step = 10e-3; 
     real_rate_len = fix((trial_dur_total-win_wid)/win_step)+1;
     
     real_rate_lip = nan(N_lip,real_rate_len,N_rep,length(unique_heading),length(unique_stim_type));
@@ -275,12 +275,18 @@ hs = tight_subplot(3,4,0.05);
 % Psychometric
 
 % --- Bootstrapping ---
-N_bootstrapping = 100;
+if ION_cluster
+    N_bootstrapping = 200;
+    N_reps_boot = N_rep; % Like in experiments
+else
+    N_bootstrapping = 20;
+    N_reps_boot = 20; % Like in experiments
+end
 thres_boot = nan(length(unique_stim_type),N_bootstrapping);
-    
+
 for ss = 1:length(unique_stim_type)
-        
-%     % I just flip the psychometric curve to the negative headings
+    
+    %     % I just flip the psychometric curve to the negative headings
 %     psychometric = [unique_heading' sum(reshape(choices{ss},[],length(unique_heading)),1)'/N_rep];
 %     fake_psy = flipud(psychometric(unique_heading>0,:));
 %     fake_psy(:,1) = -fake_psy(:,1);
@@ -293,7 +299,7 @@ for ss = 1:length(unique_stim_type)
     
     
     parfor bb = 1:N_bootstrapping
-        psycho_boot = sum(bsxfun(@le,rand(size(psychometric,1),N_rep),psychometric(:,2)),2)/N_rep;
+        psycho_boot = sum(bsxfun(@le,rand(size(psychometric,1),N_reps_boot),psychometric(:,2)),2)/N_reps_boot;
         [~, thres_boot_this] = cum_gaussfit_max1([unique_heading' psycho_boot]);
         thres_boot(ss,bb) = thres_boot_this;
     end
@@ -362,7 +368,7 @@ end
 %%{
 
 % 
-half_range = 20;
+half_range = 30;
 to_calculate_PSTH_cells_ind = find(abs(abs(prefs_lip)-90) <= half_range);   
 N_sample_cell = length(to_calculate_PSTH_cells_ind);
 
@@ -539,15 +545,17 @@ for cc = 1:N_sample_cell
     end
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
     
-    axis tight;
-    y_min = min(y_min,min(ylim));
-    y_max = max(y_max,max(ylim));
     
     title(sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(cc))));
     
-    if to_calculate_PSTH_cells_ind(cc) == left_targ_ind || to_calculate_PSTH_cells_ind(cc) == right_targ_ind
+    if abs(to_calculate_PSTH_cells_ind(cc)-left_targ_ind) == min(abs(to_calculate_PSTH_cells_ind-left_targ_ind)) ...
+            || abs(to_calculate_PSTH_cells_ind(cc) - right_targ_ind) == min(abs(to_calculate_PSTH_cells_ind - right_targ_ind))
         set(gca,'color','y');
     end
+    
+    axis tight;
+    y_min = min(y_min,min(ylim));
+    y_max = max(y_max,max(ylim));
 end
 
 set(hs,'ylim',[y_min y_max]);
