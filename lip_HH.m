@@ -73,7 +73,7 @@ if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reacti
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
 
 % Smoothed max
-decis_thres = 35*[1 1 1+0/35]; % bound height, for different conditions
+decis_thres = 34*[1 1 1] + 2*[0 0 1]; % bound height, for different conditions
 
 %  decis_thres = 40*[1 1 1+8/29]; % bound height, for different conditions
  
@@ -86,7 +86,7 @@ att_gain_stim_after_hit_bound = [0 0 0];
 if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     unique_stim_type = [1 2 3];
-    N_rep = 50; % For each condition
+    N_rep = 100; % For each condition
 else
     unique_heading = [-8 0 8];
     unique_stim_type = [1 2 3];
@@ -179,6 +179,9 @@ bias_lip = 0;
 % Input-output function of LIP
 threshold_lip = 0.0;
 
+% Others
+save_folder = '';
+
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
 para_override_txt = '';
 if nargin >= 1
@@ -186,14 +189,21 @@ if nargin >= 1
     for ll = 1:len
         if exist(para_override{ll,1},'var')
             eval([para_override{ll,1} '= para_override{ll,2};']);
+            
             fprintf('Overriding %s = %s...\n',para_override{ll,1},num2str(para_override{ll,2}));
-            para_override_txt = [para_override_txt sprintf('_%s_%s',para_override{ll,1}(1:5),num2str(para_override{ll,2}))];
+            if ~strcmp(para_override{ll,1},'save_folder')
+                para_override_txt = [para_override_txt sprintf('_%s_%s',para_override{ll,1},num2str(para_override{ll,2}))];
+            else
+                mkdir(['./result/' save_folder]);
+            end
         else
             fprintf('Parameter ''%s'' not found...\n',para_override{ll,1});
         end
     end
 end
 
+[~,gitlog] = system('git rev-parse HEAD');
+save_folder = [save_folder gitlog(1:7) '_'];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Pure Parameters End %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -369,14 +379,14 @@ if if_debug
     subplot(4,3,1);
     imagesc(prefs_lip,prefs_lip,w_lip_lip'); colorbar; axis  xy; title('LIP->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
-    set(gca,'xtick',-180:90:180);
+    set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
     hold on; plot(prefs_lip,w_lip_lip(:,end/2)/range(w_lip_lip(:,end/2))*100,'linew',3,'color','c');
     plot(xlim,[0 0],'--c');
     
     subplot(4,3,4);
     imagesc(prefs_lip,prefs_int,w_lip_int'); colorbar; axis  xy; title('Int->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{int}');
-    set(gca,'xtick',-180:90:180);
+    set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
     hold on; plot(prefs_lip,w_lip_int(:,end/2)/range(w_lip_int(:,end/2))*100,'linew',3,'color','c');
     plot(xlim,[0 0],'--c');
     
@@ -395,14 +405,14 @@ if if_debug
     
     subplot(4,3,10);
     imagesc(prefs_int,prefs_vis,w_int_vis'); colorbar; axis  xy; title('Vis/Vest->Int');
-    xlabel('\theta_{int}'); ylim([-20 20]);
+    xlabel('\theta_{int}'); ylim([-30 30]);
     set(gca,'xtick',-180:90:180);
     hold on; plot(prefs_int,w_int_vis(:,end/2)/max(w_int_vis(:,end/2))*20,'linew',3,'color','c');
     plot(xlim,[0 0],'--c');
     
     temp_ax = axes('Pos',[0.05 0.124 0.053 0.134]);
     plot(prefs_vis,gain_func_along_vis(prefs_vis)); hold on;
-    plot([-20 -20],ylim,'r-'); plot([20 20],ylim,'r-');
+    plot([-30 -30],ylim,'r-'); plot([30 30],ylim,'r-');
     view(270,90);     set(gca,'xtick',-180:90:180);
     xlabel('\theta_{vis/vest}');
     
@@ -589,14 +599,19 @@ parfor tt = 1:n_parfor_loops % For each trial
         %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out(:,k));
         
         % -- Termination --
+        % - Rate termination --
+%         %{
         if if_bounded && k*dt > stim_on_time + 0.5 && att_gain_stim == 1 ...
                 ... && (max(decision_ac(:,k+1)) > decis_thres_this)   % Only Max
                 && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
                 mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
                 ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
                 ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
-            
-            
+        %}  
+        % - Time termination (Just for para_scanning other parameters!) -
+        %{
+        if if_bounded && k*dt > stim_on_time + 0.75
+        %}    
             % Set the attention for motion stimuli to zero
             att_gain_stim = att_gain_this(ss_this);
             RT(tt) = (k-stim_on_time_in_bins)*dt;

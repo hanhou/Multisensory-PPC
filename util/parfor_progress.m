@@ -42,7 +42,7 @@ end
 percent = 0;
 w = 50; % Width of progress bar
 
-hostname = char( getHostName( java.net.InetAddress.getLocalHost)); % Get host name
+hostname = char(getHostName( java.net.InetAddress.getLocalHost)); % Get host name
 
 if N > 0
     

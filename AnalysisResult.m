@@ -37,30 +37,52 @@ rate_lip(rate_lip<0) = 0;
 
 %% == Actual shifting window spike count for LIP as in experimental data (~ rectified rate_lip etc.) ===
 % I don't use this. See above.
-%{
-win_wid = 100e-3; % in s
-win_step = 10e-3;
-real_rate_len = fix((trial_dur_total-win_wid)/win_step)+1;
-
-real_rate_lip = nan(N_lip,real_rate_len,N_rep,length(unique_heading),length(unique_stim_type));
-real_ts = nan(1,real_rate_len);
-
-for tt = 1:real_rate_len
-    this_win_beg = (tt-1)*win_step + ts(1); 
-    this_win_end = this_win_beg + win_wid;
-    real_ts(tt) =  mean([this_win_beg this_win_end]);
+% %{
+if if_debug
     
-    real_rate_lip(:,tt,:,:,:) = sum(spikes_lip(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2)/win_wid;
+    win_wid = 100e-3; % in s
+    win_step = 10e-3;
+    real_rate_len = fix((trial_dur_total-win_wid)/win_step)+1;
+    
+    real_rate_lip = nan(N_lip,real_rate_len,N_rep,length(unique_heading),length(unique_stim_type));
+    real_ts = nan(1,real_rate_len);
+    
+    for tt = 1:real_rate_len
+        this_win_beg = (tt-1)*win_step + ts(1);
+        this_win_end = this_win_beg + win_wid;
+        real_ts(tt) =  mean([this_win_beg this_win_end]);
+        
+        real_rate_lip(:,tt,:,:,:) = sum(spikes_lip(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2)/win_wid;
+        real_rate_int(:,tt,:,:,:) = sum(spikes_int(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2)/win_wid;
+        real_rate_lip(:,tt,:,:,:) = sum(spikes_lip(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2)/win_wid;
+    end
+    
+    figure(1041); clf
+    plot(real_ts,mean(real_rate_lip(left_targ_ind,:,:,end,1),3),'b--'); hold on;
+    plot(real_ts,mean(real_rate_lip(right_targ_ind,:,:,end,1),3),'b')
+    % plot(ts,mean(rectified_rate_lip(left_targ_ind,:,:,end,1),3),'r--');
+    % plot(ts,mean(rectified_rate_lip(right_targ_ind,:,:,end,1),3),'r');
+    plot(ts,mean(rate_lip(left_targ_ind,:,:,end,1),3),'g--');
+    plot(ts,mean(rate_lip(right_targ_ind,:,:,end,1),3),'g');
+    % export_fig('-painters','-nocrop','-m2' ,sprintf('./result/test.png'));
+    
+    %% Snapshot of population activity (for demo)
+    spkCntCent = [1.0];
+    spkCntWin = 0.2; % 200 ms
+    areas = {'lip','int','target','vest','vis'};
+    cols = {'g','k','k','b','r'};
+    figure(15); clf
+    prefs_target = prefs_lip;
+    
+    for aa = 1:length(areas) % Draw the last condition
+        eval(sprintf('real_count_%s = sum(spikes_%s(:,spkCntCent-spkCntWin/2 <= ts & ts < spkCntCent+spkCntWin/2,end,end,end),2);',areas{aa},areas{aa}));
+        subplot(2,3,aa);
+        eval(sprintf('plot(prefs_%s,real_count_%s,''o%s''); title(''%s'');',areas{aa},areas{aa},cols{aa},areas{aa}));
+        if aa >= 4
+            hold on; plot([0 0],[0 max(ylim)],'k--');
+        end
+    end
 end
-
-figure();
-plot(real_ts,mean(real_rate_lip(left_targ_ind,:,:,end,1),3),'b--'); hold on;
-plot(real_ts,mean(real_rate_lip(right_targ_ind,:,:,end,1),3),'b')
-plot(ts,mean(rectified_rate_lip(left_targ_ind,:,:,end,1),3),'r--');
-plot(ts,mean(rectified_rate_lip(right_targ_ind,:,:,end,1),3),'r');
-plot(ts,mean(rate_lip(left_targ_ind,:,:,end,1),3),'g--');
-plot(ts,mean(rate_lip(right_targ_ind,:,:,end,1),3),'g');
-export_fig('-painters','-nocrop','-m2' ,sprintf('./result/test.png'));
 %}
 
 %% == Plotting example network activities ==
@@ -151,7 +173,7 @@ choices = sign((prefs_lip(shiftdim(readout_lip_at_decision)) >= 0) -0.5); % choi
 %     psychometric = [fake_psy ; psychometric];
 
     
-%% ====== Example Pref and Null traces (correct only) ======
+%% ====== Fig. 1 Example Pref and Null traces (correct only) ======
 %%{
 
 to_plot_abs_headings = [0 4 8];
@@ -197,7 +219,7 @@ for tph = 1:length(to_plot_abs_headings)
                 axis tight; y_min = min(y_min,min(ylim)); y_max = max(y_max,max(ylim)); to_sync = [to_sync gca];
                 
                 % --- Int ---
-                axes(hs(6*(tph-1)+ss)+3);
+                axes(hs(6*(tph-1)+ss+3));
                 if cc == 1 % Pref
                     plot(ts,rate_int(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
                 else
@@ -220,7 +242,7 @@ for tph = 1:length(to_plot_abs_headings)
             %         ylim([min(ylim),decis_thres(k)*1.1]);
         end
         
-        axes(hs(6*(tph-1)+ss)+3);
+        axes(hs(6*(tph-1)+ss+3));
         title(sprintf('rate\\_int'));
         plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
         axis tight;
@@ -232,8 +254,8 @@ end
 set(to_sync,'ylim',[y_min y_max]);
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/1_Example%s.png',para_override_txt));
-    saveas(gcf,sprintf('./result/1_Example%s.fig',para_override_txt),'fig');
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s1_Example%s.png',save_folder,para_override_txt));
+    saveas(gcf,sprintf('./result/%s1_Example%s.fig',save_folder,para_override_txt),'fig');
 end
 
 disp('Example done');
@@ -245,10 +267,17 @@ figure(1000); clf;
 set(gcf,'name','Overview');
 set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
 
+hpsy = axes('position',[ 0.0540    0.6860    0.0890      0.1360]);
+
 hs = tight_subplot(3,4,0.05);
 
 % ======= Behavior ========
 % Psychometric
+
+% --- Bootstrapping ---
+N_bootstrapping = 100;
+thres_boot = nan(length(unique_stim_type),N_bootstrapping);
+    
 for ss = 1:length(unique_stim_type)
         
 %     % I just flip the psychometric curve to the negative headings
@@ -260,18 +289,31 @@ for ss = 1:length(unique_stim_type)
 
     psychometric = [unique_heading' sum(reshape(choices(:,:,ss)==RIGHT,[],length(unique_heading)),1)'/N_rep];
 
-    axes(hs(1));
+    axes(hs(1)); set(gca,'color','none');
+    
+    
+    parfor bb = 1:N_bootstrapping
+        psycho_boot = sum(bsxfun(@le,rand(size(psychometric,1),N_rep),psychometric(:,2)),2)/N_rep;
+        [~, thres_boot_this] = cum_gaussfit_max1([unique_heading' psycho_boot]);
+        thres_boot(ss,bb) = thres_boot_this;
+    end
+    
+    set(bar(ss,mean(thres_boot(ss,:))),'facecolor',colors(unique_stim_type(ss),:)); hold on;
+    errorbar(ss,mean(thres_boot(ss,:)),std(thres_boot(ss,:)),'color',colors(unique_stim_type(ss),:));
+    
+    
+    axes(hpsy);
     plot(psychometric(:,1),psychometric(:,2),'o','color',colors(unique_stim_type(ss),:),'markerfacecolor',colors(unique_stim_type(ss),:),'markersize',10); % Psychometric
     hold on;
     xxx = -max(unique_heading):0.1:max(unique_heading);
     
     [bias, threshold] = cum_gaussfit_max1(psychometric);
     psycho(ss,:) = [bias,threshold];
+    
+    set(text(min(xlim),0.6+0.06*ss,sprintf('%g\n',threshold)),'color',colors(unique_stim_type(ss),:));
+    
     plot(xxx,normcdf(xxx,bias,threshold),'-','color',colors(unique_stim_type(ss),:),'linewid',4);
     axis([-8.5 8.5 0 1]);
-
-    set(text(min(xlim),0.6+0.06*ss,sprintf('threshold = %g\n',threshold)),'color',colors(unique_stim_type(ss),:));
-    title(sprintf('N_{reps} = %g',N_rep));
     
     % Chronometric
     axes(hs(2));
@@ -300,18 +342,35 @@ plot(vel/max(vel)*max(xlim)/3-8,t_motion,'k--','linew',2);
 title(sprintf('RT, correct trials, Bound = %s',num2str(decis_thres)));
 
 axes(hs(1));
+thres_boot(4,:) = (thres_boot(1,:).^(-2) + thres_boot(2,:).^(-2)).^(-1/2);
+set(bar(4,mean(thres_boot(4,:))),'facecolor','k'); hold on;
+errorbar(4,mean(thres_boot(4,:)),std(thres_boot(4,:)),'k');
+
+title(sprintf('N_{reps} = %g',N_rep));
+
+% Pred
+axes(hpsy);
 if length(unique_stim_type) == 3
     pred_thres = (psycho(1,2)^(-2)+psycho(2,2)^(-2))^(-1/2);
     set(text(min(xlim),0.6+0.06*(ss+1),sprintf('pred = %g\n',pred_thres)),'color','k');
 end
+
 
 %}
 
 % ===== Averaged PSTH, different angles =====
 %%{
 
-to_calculate_PSTH_cells_ind = [right_targ_ind-20:5:right_targ_ind+20 left_targ_ind-20:5:left_targ_ind+20];   
+% 
+half_range = 20;
+to_calculate_PSTH_cells_ind = find(abs(abs(prefs_lip)-90) <= half_range);   
 N_sample_cell = length(to_calculate_PSTH_cells_ind);
+
+if N_sample_cell > 30
+    to_calculate_PSTH_cells_ind = to_calculate_PSTH_cells_ind(round(1:N_sample_cell/30:N_sample_cell));
+    N_sample_cell = length(to_calculate_PSTH_cells_ind);
+end
+
 % to_plot_grouped_PSTH = find(to_calculate_PSTH_cells_ind == right_targ_ind);
 to_plot_grouped_PSTH = 1:N_sample_cell; % Group all calculated cells
 
@@ -328,7 +387,7 @@ for ss = 1:length(unique_stim_type)
     
     for cc = 1:2 % Pref and Null
         PSTH_cache = [];
-        
+         
         for abshh = 1:length(unique_abs_heading)         % For different abs(headings)
             % Assuming PREF = RIGHT for all the cells
             this_heading_ind = find(unique_heading == unique_abs_heading(abshh) * pref_null(cc),1);
@@ -355,8 +414,15 @@ for ss = 1:length(unique_stim_type)
     end
 end
 % Flip pref and null if PREF = LEFT for some of the cells
-PSTH_correct_mean_headings(to_flip,:,:,:,:) = flip(PSTH_correct_mean_headings(to_flip,:,:,:,:),5);
-PSTH_correct_mean_allheading(to_flip,:,:,:) = flip(PSTH_correct_mean_allheading(to_flip,:,:,:),4);
+v = version;
+
+if str2num(v(findstr(v,'R')+1:findstr(v,'R')+4)) >= 2014
+    PSTH_correct_mean_headings(to_flip,:,:,:,:) = flip(PSTH_correct_mean_headings(to_flip,:,:,:,:),5);
+    PSTH_correct_mean_allheading(to_flip,:,:,:) = flip(PSTH_correct_mean_allheading(to_flip,:,:,:),4);
+else
+    PSTH_correct_mean_headings(to_flip,:,:,:,:) = flipdim(PSTH_correct_mean_headings(to_flip,:,:,:,:),5);
+    PSTH_correct_mean_allheading(to_flip,:,:,:) = flipdim(PSTH_correct_mean_allheading(to_flip,:,:,:),4);    
+end
 
 diff_PSTH_correct_mean_headings = - diff(PSTH_correct_mean_headings,[],5);
 diff_PSTH_correct_mean_allheading = - diff(PSTH_correct_mean_allheading,[],4);
@@ -402,7 +468,9 @@ for abshh = 1:length(unique_abs_heading)
     for ss = 1:length(unique_stim_type)
         plot(ts,mean(diff_PSTH_correct_mean_headings(to_plot_grouped_PSTH,:,ss,abshh),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
     end
-    plot(ts,mean(sum(diff_PSTH_correct_mean_headings(to_plot_grouped_PSTH,:,[1 2],abshh),3),1),'k--');
+    if length(unique_stim_type) == 3
+        plot(ts,mean(sum(diff_PSTH_correct_mean_headings(to_plot_grouped_PSTH,:,[1 2],abshh),3),1),'k--');
+    end
     title(sprintf('|heading| = %g',unique_abs_heading(abshh)));
     
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
@@ -416,8 +484,12 @@ axes(hs(12)); hold on;    title('All headings');
 
 for ss = 1:length(unique_stim_type)
     plot(ts,mean(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+%     errorbar(ts,mean(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),1),...
+%         std(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),[],1)/sqrt(length(to_plot_grouped_PSTH)),'color',colors(unique_stim_type(ss),:),'linew',2.5);
 end
-plot(ts,mean(sum(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,[1 2]),3),1),'k--');
+if length(unique_stim_type) == 3
+    plot(ts,mean(sum(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,[1 2]),3),1),'k--');
+end
 plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
 
 axis tight;
@@ -439,8 +511,8 @@ xlim([min(ts),max(ts)]);
 
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/2_Overview%s.png',para_override_txt));
-    saveas(gcf,sprintf('./result/2_Overview%s.fig',para_override_txt),'fig');
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s2_Overview%s.png',save_folder,para_override_txt));
+    saveas(gcf,sprintf('./result/%s2_Overview%s.fig',save_folder,para_override_txt),'fig');
 end
 disp('Overview done');
 
@@ -451,6 +523,7 @@ set(gcf,'name','Different cells');
 set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
 
 % -- diff_PSTH for all headings --
+
 m = fix(sqrt(N_sample_cell+1));
 n = ceil((N_sample_cell+1)/m);
 [~,hs] = tight_subplot(m,n,0.05);
@@ -461,7 +534,9 @@ for cc = 1:N_sample_cell
     for ss = 1:length(unique_stim_type)
         plot(ts,diff_PSTH_correct_mean_allheading(cc,:,ss),'color',colors(unique_stim_type(ss),:),'linew',2.5);
     end
-    plot(ts,sum(diff_PSTH_correct_mean_allheading(cc,:,[1 2]),3),'k--');
+    if length(unique_stim_type) == 3
+        plot(ts,sum(diff_PSTH_correct_mean_allheading(cc,:,[1 2]),3),'k--');
+    end
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
     
     axis tight;
@@ -469,26 +544,31 @@ for cc = 1:N_sample_cell
     y_max = max(y_max,max(ylim));
     
     title(sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(cc))));
+    
+    if to_calculate_PSTH_cells_ind(cc) == left_targ_ind || to_calculate_PSTH_cells_ind(cc) == right_targ_ind
+        set(gca,'color','y');
+    end
 end
 
 set(hs,'ylim',[y_min y_max]);
 
 % -- Raster plot of multisensory enhancement --
-axes(hs(end));
-comb_minus_vest = mean(diff_PSTH_correct_mean_allheading(:,:,3)-diff_PSTH_correct_mean_allheading(:,:,1),2);
-comb_minus_vis = mean(diff_PSTH_correct_mean_allheading(:,:,3)-diff_PSTH_correct_mean_allheading(:,:,2),2);
-plot(comb_minus_vest,comb_minus_vis,'og','markersize',7,'markerfacecol','g'); hold on;
-xlabel('Comb - Vest'); ylabel('Comb - Vis');
-max_axis = max(abs([ylim xlim]));
-plot([0 0],[-max_axis max_axis],'--k');
-plot([-max_axis max_axis],[0 0],'--k');
-plot([-max_axis max_axis],[-max_axis max_axis],'--k');
-axis tight square;
-
+if length(unique_stim_type) == 3
+    axes(hs(end));
+    comb_minus_vest = mean(diff_PSTH_correct_mean_allheading(:,:,3)-diff_PSTH_correct_mean_allheading(:,:,1),2);
+    comb_minus_vis = mean(diff_PSTH_correct_mean_allheading(:,:,3)-diff_PSTH_correct_mean_allheading(:,:,2),2);
+    plot(comb_minus_vest,comb_minus_vis,'og','markersize',7,'markerfacecol','g'); hold on;
+    xlabel('Comb - Vest'); ylabel('Comb - Vis');
+    max_axis = max(abs([ylim xlim]));
+    plot([0 0],[-max_axis max_axis],'--k');
+    plot([-max_axis max_axis],[0 0],'--k');
+    plot([-max_axis max_axis],[-max_axis max_axis],'--k');
+    axis tight square;
+end
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/3_Cells%s.png',para_override_txt));
-    saveas(gcf,sprintf('./result/3_Cells%s.fig',para_override_txt),'fig');
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s3_Cells%s.png',save_folder,para_override_txt));
+    saveas(gcf,sprintf('./result/%s3_Cells%s.fig',save_folder,para_override_txt),'fig');
 end
 disp('Different cells done');
 
