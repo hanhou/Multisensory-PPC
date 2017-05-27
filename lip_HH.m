@@ -54,8 +54,8 @@ N_vest = 200; % Vestibular motion signal
 % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
 % which has a short time constant, keeps receiving target input but does not integrate it.
 % For most part of the code, I just rename the old "_lip" stuff to "_int"
-N_int = 200;
-N_lip = 200;  % Output layers (Real LIP layer)
+N_int = 300;
+N_lip = 300;  % Output layers (Real LIP layer)
 
 % ============ Times ============
 if ION_cluster
@@ -76,7 +76,7 @@ if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reacti
 decis_thres = 32*[1 1 1] + 2.5*[0 0 1]; % bound height, for different conditions
 
 %  decis_thres = 40*[1 1 1+8/29]; % bound height, for different conditions
- 
+
 % Smoothed diff
 % decis_thres = 13*[1 1 1+2/13]; % bound height, for different conditions
 
@@ -86,7 +86,7 @@ att_gain_stim_after_hit_bound = [0 0 0];
 if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     unique_stim_type = [1 2 3];
-    N_rep = 200; % For each condition
+    N_rep = 100; % For each condition
 else
     unique_heading = [-8 0 8];
     unique_stim_type = [1 2 3];
@@ -182,6 +182,21 @@ threshold_lip = 0.0;
 % Others
 save_folder = '';
 
+% ==== Heterogeneity ====
+
+% --- "POST": Add heterogeneity in post synaptic parameters ---
+% Variability in:    g       k     dc                   
+vari_weight_post =  [0.2     0.5     0 ;  % vest -> int
+                     0.2     0.5     0 ;  % vis -> int
+                     0       0.2   0.1 ;  % int -> lip
+                     0       0.2   0.2 ]; % lip -> lip
+                 
+vari_weight_post (:) = 0;
+
+% --- "Normal": Add normal distributed noise in the weight matrix ---
+vari_weight_normal_noise = [2;2;2;2]; %                  
+
+
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
 para_override_txt = '';
 if nargin >= 1
@@ -202,8 +217,13 @@ if nargin >= 1
     end
 end
 
-[~,gitlog] = system('git rev-parse HEAD');
-save_folder = [save_folder gitlog(1:7) '_'];
+[~,gitlog] = system('git describe --always');
+gitlog = sprintf('%s',gitlog(1:7));
+cc = clock;
+cc = sprintf('%g%02g%02g%g%g',cc(1:5));
+% save_folder = [save_folder cc '_' gitlog '_'];
+save_folder = [save_folder cc '_' ];
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Pure Parameters End %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -230,7 +250,7 @@ k_int_vest = k_int_vis;
 k_int_vest_along_vest = k_int_vis_along_vis;
 
 
-% ---- Network related ---- 
+% ---- Network related ----
 prefs_vis = linspace(-180,180,N_vis);
 prefs_vest = linspace(-180,180,N_vis);
 prefs_int = linspace(-180,180,N_int);
@@ -241,7 +261,7 @@ prefs_lip = linspace(-180,180,N_lip);
 gain_func_along_vis = @(x) (1./(1+exp(-(abs(90-abs(90-abs(x))))/k_int_vis_along_vis))-0.5)*2;
 gain_func_along_vest = @(x) (1./(1+exp(-(abs(90-abs(90-abs(x))))/k_int_vest_along_vest))-0.5)*2;
 
-% ---- Time related ---- 
+% ---- Time related ----
 trial_dur_total_in_bins = round(trial_dur_total/dt); %% in time bins (including pre_trial_dur)
 stim_on_time_in_bins = stim_on_time/dt; % Time of motion start, in time bins.
 
@@ -271,7 +291,7 @@ end
 %%%%%%%%%%% Pack all paras %%%%%%%%%%%
 para_list = who;
 for i = 1:length(para_list)
-    paras.(para_list{i}) = eval(para_list{i});
+        paras.(para_list{i}) = eval(para_list{i});
 end
 
 
@@ -328,24 +348,50 @@ w_int_int = zeros(N_int,N_int);
 w_lip_int = zeros(N_lip,N_int);
 w_lip_lip = zeros(N_lip,N_lip);
 
+% ==== Heterogeneity Method 1: Add heterogeneity in post synaptic parameters ("POST") ====
+         
+g_w_int_vest_heter = (1+randn(1,N_int)*vari_weight_post(1,1)) * g_w_int_vest; % (mean = std)
+k_int_vest_heter = (1+randn(1,N_int)*vari_weight_post(1,2)) * k_int_vest; k_int_vest_heter(k_int_vest_heter<=1) = 1;
+dc_w_int_vest_heter = (1+randn(1,N_int)*vari_weight_post(1,3)) * dc_w_int_vest - randn(1,N_int)*0.1; dc_w_int_vest_heter(dc_w_int_vest_heter>0) = 0;
+
+g_w_int_vis_heter = (1+randn(1,N_int)*vari_weight_post(2,1)) * g_w_int_vis; % (mean = std)
+k_int_vis_heter = (1+randn(1,N_int)*vari_weight_post(2,2)) * k_int_vis;  k_int_vis_heter(k_int_vis_heter<=1) = 1;
+dc_w_int_vis_heter = (1+randn(1,N_int)*vari_weight_post(2,3)) * dc_w_int_vis - randn(1,N_int)*0.1;  dc_w_int_vis_heter(dc_w_int_vis_heter>0) = 0;
+
+g_w_lip_int_heter = (1+randn(1,N_lip)*vari_weight_post(3,1)) * g_w_lip_int; % (mean = std)
+k_lip_int_heter = (1+randn(1,N_lip)*vari_weight_post(3,2)) * k_lip_int; k_lip_int_heter(k_lip_int_heter<=1) = 1;
+dc_w_lip_int_heter = (1+randn(1,N_lip)*vari_weight_post(3,3)) * dc_w_lip_int;
+
+g_w_lip_lip_heter = (1+randn(1,N_lip)*vari_weight_post(4,1)) * g_w_lip_lip; % (mean = std)
+k_lip_lip_heter = (1+randn(1,N_lip)*vari_weight_post(4,2)) * k_lip_lip; k_lip_lip_heter(k_lip_lip_heter<=1) = 1;
+dc_w_lip_lip_heter = (1+randn(1,N_lip)*vari_weight_post(4,3)) * dc_w_lip_lip;
 
 for nn=1:N_int
     
     % -- VIS->Int, Vest->Int --
-    w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+%     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+%         .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+%         + dc_w_int_vis/N_vis;   % Offset
+%     
+%     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+%         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
+%         + dc_w_int_vest/N_vest;   % Offset
+
+    w_int_vis(nn,:) = g_w_int_vis_heter(nn)/N_vis *(exp(k_int_vis_heter(nn) * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
         .* abs(sin(prefs_vis/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-        + dc_w_int_vis/N_vis;   % Offset
-    w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+        + dc_w_int_vis_heter(nn)/N_vis;   % Offset
+    
+    w_int_vest(nn,:) = g_w_int_vest_heter(nn)/N_vest *(exp(k_int_vest_heter(nn) * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
         .* abs(sin(prefs_vest/180*pi))... % Gaussian(theta_int - +/-90) * Sin(heading)
-        + dc_w_int_vest/N_vest;   % Offset
+        + dc_w_int_vest_heter(nn)/N_vest;   % Offset
     
     % Added a K_int_vis_sin factor to tweak the slices of weight matrix along the vis/vest axis (sigmoid --> step)
-%     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
-%         .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
-%         + dc_w_int_vis/N_vis;   % Offset
-%     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
-%         .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
-%         + dc_w_int_vest/N_vest;   % Offset
+    %     w_int_vis(nn,:) = g_w_int_vis/N_vis *(exp(k_int_vis * (cos((prefs_int(nn)-(-90*(prefs_vis<0)+90*(prefs_vis>0)))/180*pi)-1)))...
+    %         .* gain_func_along_vis(prefs_vis)... % Gaussian(theta_int - +/-90) * Sin(heading)
+    %         + dc_w_int_vis/N_vis;   % Offset
+    %     w_int_vest(nn,:) = g_w_int_vest/N_vest *(exp(k_int_vest * (cos((prefs_int(nn)-(-90*(prefs_vest<0)+90*(prefs_vest>0)))/180*pi)-1)))...
+    %         .* gain_func_along_vest(prefs_vest) ... % Gaussian(theta_int - +/-90) * Sin(heading)
+    %         + dc_w_int_vest/N_vest;   % Offset
     
     % -- Int->Int --
     %     w_int_int(nn,:) = g_w_int_int/N_int*...   %  Integrator recurrent
@@ -354,69 +400,86 @@ for nn=1:N_int
     %         + dc_w_int_int/N_int;
 end
 
-for nn=1:N_lip
+
+for nn=1:N_lip % For each POST-synaptic cell
     
     % -- Targ->LIP --
     w_lip_targ(nn,:) = g_w_lip_targ/N_int *(exp(k_lip_targ*(cos((prefs_lip-prefs_lip(nn))/360 *2*pi)-1)));  %  Target input
     
     % -- Int->LIP --
-    w_lip_int(nn,:) = g_w_lip_int/N_int*...
-        ((exp(k_lip_int*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1)))-...
+    %     w_lip_int(nn,:) = g_w_lip_int/N_int*...
+    %         ((exp(k_lip_int*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1)))-...
+    %         amp_I_lip_int*(exp(k_lip_int_I*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1))))...
+    %         + dc_w_lip_int/N_int;
+    w_lip_int(nn,:) = g_w_lip_int_heter(nn)/N_int*...
+        ((exp(k_lip_int_heter(nn)*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1)))-...
         amp_I_lip_int*(exp(k_lip_int_I*(cos((prefs_int-prefs_lip(nn))/360*2*pi)-1))))...
-        + dc_w_lip_int/N_int;
-    
+        + dc_w_lip_int_heter(nn)/N_int;
+   
     % -- LIP->LIP --
-    w_lip_lip(nn,:) = g_w_lip_lip/N_lip*...
-        ((exp(k_lip_lip*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
+    %     w_lip_lip(nn,:) = g_w_lip_lip/N_lip*...
+    %         ((exp(k_lip_lip*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
+    %         amp_I_lip*(exp(k_lip_I*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1))))...
+    %         + dc_w_lip_lip/N_lip;
+    w_lip_lip(nn,:) = g_w_lip_lip_heter(nn)/N_lip*...
+        ((exp(k_lip_lip_heter(nn)*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1)))-...
         amp_I_lip*(exp(k_lip_I*(cos((prefs_lip-prefs_lip(nn))/360*2*pi)-1))))...
-        + dc_w_lip_lip/N_lip;
+        + dc_w_lip_lip_heter(nn)/N_lip;
 end
+
+% ==== Heterogeneity Method 3 : Add Gaussian noise in weights ("Normal") ====
+w_int_vest =  w_int_vest + randn(size(w_int_vest))*std(w_int_vest(:))*vari_weight_normal_noise(1);
+w_int_vis = w_int_vis + randn(size(w_int_vis))*std(w_int_vis(:))*vari_weight_normal_noise(2);
+w_lip_int = w_lip_int + randn(size(w_lip_int))*std(w_lip_int(:))*vari_weight_normal_noise(3);
+w_lip_lip = w_lip_lip + randn(size(w_lip_lip))*std(w_lip_lip(:))*vari_weight_normal_noise(4);
+
 
 if if_debug
     figure(90); clf;
     set(gcf,'uni','norm','pos',[0.006       0.099       0.779       0.766],'name','Weights & Raster plot');
     
-    subplot(4,3,1);
-    imagesc(prefs_lip,prefs_lip,w_lip_lip'); colorbar; axis  xy; title('LIP->LIP');
+    % subplot(4,3,1);
+    axes('position',[0.08 0.725 0.23 0.241]);
+    h1 = imagesc(prefs_lip,prefs_lip,w_lip_lip'); colorbar; axis  xy; title('LIP->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
     set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
-    hold on; plot(prefs_lip,w_lip_lip(:,end/2)/range(w_lip_lip(:,end/2))*100,'linew',3,'color','c');
-    plot(xlim,[0 0],'--c');
+    set(h1,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_lip,w_lip_lip'});
     
-    subplot(4,3,4);
-    imagesc(prefs_lip,prefs_int,w_lip_int'); colorbar; axis  xy; title('Int->LIP');
+    % subplot(4,3,4);
+    axes('position',[0.08 0.384 0.23 0.241]);
+    h2 = imagesc(prefs_int,prefs_lip,w_lip_int'); colorbar; axis xy; title('Int->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{int}');
     set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
-    hold on; plot(prefs_lip,w_lip_int(:,end/2)/range(w_lip_int(:,end/2))*100,'linew',3,'color','c');
-    plot(xlim,[0 0],'--c');
+    set(h2,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_int,w_lip_int'});
     
-    subplot(4,3,7);
-    % surf(prefs_int,prefs_int,w_int_int');
-    imagesc(prefs_int,prefs_int,w_int_int');    colorbar; axis xy; title('Int->Int');
-    xlabel('\theta_{int}'); ylabel('\theta_{int}');
-    set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
-    hold on; plot(prefs_int,w_int_int(:,end/2)/range(w_int_int(:,end/2))*100,'linew',3,'color','c');
-    plot(xlim,[0 0],'--c');
+    %     subplot(4,3,7);
+    %     % surf(prefs_int,prefs_int,w_int_int');
+    %     imagesc(prefs_int,prefs_int,w_int_int');    colorbar; axis xy; title('Int->Int');
+    %     xlabel('\theta_{int}'); ylabel('\theta_{int}');
+    %     set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
+    %     hold on; plot(prefs_int,w_int_int(:,end/2)/range(w_int_int(:,end/2))*100,'linew',3,'color','c');
+    %     plot(xlim,[0 0],'--c');
     
     %     subplot(4,3,7);
     %     imagesc(prefs_int,prefs_vest,w_int_vest'); colorbar; axis  xy; title('Vest->Int');
     %     xlabel('\theta_{int}'); ylabel('\theta_{vest}'); ylim([-20 20]);
     %     set(gca,'xtick',-180:90:180);
     
-    subplot(4,3,10);
-    imagesc(prefs_int,prefs_vis,w_int_vis'); colorbar; axis  xy; title('Vis/Vest->Int');
+    % subplot(4,3,10);
+    axes('position',[0.08 0.055 0.23 0.241]);
+    h3 = imagesc(prefs_vis,prefs_int,w_int_vis'); colorbar; axis xy; title('Vis/Vest->Int');
     xlabel('\theta_{int}'); ylim([-30 30]);
     set(gca,'xtick',-180:90:180);
-    hold on; plot(prefs_int,w_int_vis(:,end/2)/max(w_int_vis(:,end/2))*20,'linew',3,'color','c');
-    plot(xlim,[0 0],'--c');
-    
-    temp_ax = axes('Pos',[0.05 0.124 0.053 0.134]);
-    plot(prefs_vis,gain_func_along_vis(prefs_vis)); hold on;
-    plot([-30 -30],ylim,'r-'); plot([30 30],ylim,'r-');
-    view(270,90);     set(gca,'xtick',-180:90:180);
-    xlabel('\theta_{vis/vest}');
+    set(h3,'ButtonDownFcn',{@plot_weight,prefs_int,prefs_vis,w_int_vis'});
+    ylabel('\theta_{vis/vest}');
+%     temp_ax = axes('Pos',[0.05 0.124 0.053 0.134]);
+%     plot(prefs_vis,gain_func_along_vis(prefs_vis)); hold on;
+%     plot([-30 -30],ylim,'r-'); plot([30 30],ylim,'r-');
+%     view(270,90);     set(gca,'xtick',-180:90:180);
+%     xlabel('\theta_{vis/vest}');
     
     colormap hot;
+    keyboard;
 end
 
 %  Sensory correlation matrix
@@ -561,7 +624,7 @@ parfor tt = 1:n_parfor_loops % For each trial
     rate_lip_this = zeros(N_lip,trial_dur_total_in_bins);
     spikes_int_this = zeros(N_int,trial_dur_total_in_bins);
     spikes_lip_this = zeros(N_lip,trial_dur_total_in_bins);
-    decision_ac = zeros(N_int,trial_dur_total_in_bins+2);
+    decision_ac = zeros(N_lip,trial_dur_total_in_bins+2);
     
     while k<=trial_dur_total_in_bins-1
         
@@ -600,18 +663,18 @@ parfor tt = 1:n_parfor_loops % For each trial
         
         % -- Termination --
         % - Rate termination --
-%         %{
+%                 %{
         if if_bounded && k*dt > stim_on_time + 0.5 && att_gain_stim == 1 ...
                 ... && (max(decision_ac(:,k+1)) > decis_thres_this)   % Only Max
                 && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
                 mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
-                ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
+            ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
                 ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
-        %}  
-        % - Time termination (Just for para_scanning other parameters!) -
-        %{
-        if if_bounded && k*dt > stim_on_time + 0.75
-        %}    
+                %}
+            % - Time termination (Just for para_scanning other parameters!) -
+            %{
+        if if_bounded && att_gain_stim == 1 && k*dt > stim_on_time + 0.75 
+            %}
             % Set the attention for motion stimuli to zero
             att_gain_stim = att_gain_this(ss_this);
             RT(tt) = (k-stim_on_time_in_bins)*dt;
@@ -656,7 +719,7 @@ RT = reshape(RT,N_rep,length(unique_heading),length(unique_stim_type));
 %     save('./result/last_result.mat','paras','rate_lip','rate_int','RT','-v7.3');
 % end
 
-if if_debug
+if if_debug | 1
     assignin('base','rate_lip', rate_lip);
     assignin('base','paras', paras);
     assignin('base','rate_int', rate_int);
@@ -667,6 +730,10 @@ if if_debug
     assignin('base','spikes_lip', spikes_lip);
     assignin('base','proba_target_tuning', proba_target_tuning);
     assignin('base','RT', RT);
+    assignin('base','w_lip_lip', w_lip_lip);
+    assignin('base','w_lip_int', w_lip_int);
+    assignin('base','w_int_vis', w_int_vis);
+    assignin('base','w_int_vest', w_int_vest);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -682,6 +749,26 @@ if nargin == 2 % Save result
     end
 else
     result =[];
+end
+end
+
+function plot_weight(~,~,x,y,w)
+persistent h;
+pos = get(gca,'CurrentPo');
+xx = pos(1);
+yy = pos(3);
+[~,x_ind] = min(abs(xx-x));
+[~,y_ind] = min(abs(yy-y));
+
+hold on;  if ishandle(h); delete(h); end
+h(1) = plot(x,w(y_ind,:)/max(abs(w(:)))*max(ylim)/2,'linew',3,'color','c');
+h(2) = plot(xlim,[0 0],':c');
+h(3) = plot(xlim,[yy yy],'--c');
+
+h(4) = plot(w(:,x_ind)/max(abs(w(:)))*max(xlim)/2,y,'linew',3,'color','c');
+h(5) = plot([0 0],ylim,':c');
+h(6) = plot([xx xx],ylim,'--c');
+
 end
 
 

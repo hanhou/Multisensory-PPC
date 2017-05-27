@@ -40,7 +40,7 @@ rate_lip(rate_lip<0) = 0;
 % %{
 if if_debug
     
-    win_wid = 100e-3; % in s
+    win_wid = 200e-3; % in s
     win_step = 10e-3; 
     real_rate_len = fix((trial_dur_total-win_wid)/win_step)+1;
     
@@ -66,7 +66,7 @@ if if_debug
     plot(ts,mean(rate_lip(right_targ_ind,:,:,end,1),3),'g');
     % export_fig('-painters','-nocrop','-m2' ,sprintf('./result/test.png'));
     
-    %% Snapshot of population activity (for demo)
+    %% Example snapshot of population activity (for demo)
     spkCntCent = [1.0];
     spkCntWin = 0.2; % 200 ms
     areas = {'lip','int','target','vest','vis'};
@@ -133,6 +133,31 @@ if if_debug
         
         drawnow;
     end
+else % Not debug, Fig.2a in Beck 2008
+  %% Averaged population activity for the to_plot_cond condition
+%   %{
+    rate_expected_lip_aver = nanmean(rate_lip(:,:,:,this_heading_ind,to_plot_cond),3);
+    figure(1647);  set(gcf,'uni','norm','pos',[0.252       0.431       0.669       0.435]);    clf; 
+    
+    subplot(1,2,1);
+    to_snap_time = [0.25 0.5 0.75 1.0 1.25];
+    snapshots =  arrayfun(@(x)find(ts>x,1),to_snap_time);
+    set(0,'defaultaxescolororder',lines)
+    plot(prefs_lip,rate_expected_lip_aver(:,snapshots),'o');
+    set(gca,'xtick',[-180:90:180]);
+    title('PSTH');
+    legend(num2str(to_snap_time'));
+    
+    subplot(1,2,2);
+    plot(prefs_lip(1:end/2),rate_expected_lip_aver(end/2+1:end,snapshots)-fliplr(rate_expected_lip_aver(1:end/2,snapshots)),'o');
+    title('Diff PSTH');
+    set(gca,'xtick',[-180:90:180]);
+    
+    if ION_cluster
+        export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s1p5_Fig2a%s.png',save_folder,para_override_txt));
+        saveas(gcf,sprintf('./result/%s1p5_Fig2a%s.fig',save_folder,para_override_txt),'fig');
+    end
+  %}
 end
 
 %% ====== Connection and Raster plot ======
@@ -221,9 +246,9 @@ for tph = 1:length(to_plot_abs_headings)
                 % --- Int ---
                 axes(hs(6*(tph-1)+ss+3));
                 if cc == 1 % Pref
-                    plot(ts,rate_int(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
+                    plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
                 else
-                    plot(ts,rate_int(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1); hold on;
+                    plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1); hold on;
                 end
                 %     if if_bounded
                 %         plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
@@ -277,10 +302,10 @@ hs = tight_subplot(3,4,0.05);
 % --- Bootstrapping ---
 if ION_cluster
     N_bootstrapping = 200;
-    N_reps_boot = N_rep; % Like in experiments
+    N_reps_boot = N_rep;
 else
     N_bootstrapping = 20;
-    N_reps_boot = 20; % Like in experiments
+    N_reps_boot = 20; 
 end
 thres_boot = nan(length(unique_stim_type),N_bootstrapping);
 
@@ -370,9 +395,10 @@ end
 % 
 half_range = 30;
 to_calculate_PSTH_cells_ind = find(abs(abs(prefs_lip)-90) <= half_range);   
+% to_calculate_PSTH_cells_ind = find(prefs_lip>-117,1);
 N_sample_cell = length(to_calculate_PSTH_cells_ind);
 
-if N_sample_cell > 30
+if N_sample_cell > 60
     to_calculate_PSTH_cells_ind = to_calculate_PSTH_cells_ind(round(1:N_sample_cell/30:N_sample_cell));
     N_sample_cell = length(to_calculate_PSTH_cells_ind);
 end
@@ -522,16 +548,16 @@ if ION_cluster
 end
 disp('Overview done');
 
-%% ====== Fig.3 Different cells ======
+%% ====== Fig.3 Different cells, delta PSTH ======
 
 figure(1002); clf;
-set(gcf,'name','Different cells');
+set(gcf,'name','Different cells, delta PSTH');
 set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
 
 % -- diff_PSTH for all headings --
 
-m = fix(sqrt(N_sample_cell+1));
-n = ceil((N_sample_cell+1)/m);
+m = fix(sqrt(N_sample_cell+5));
+n = ceil((N_sample_cell+5)/m);
 [~,hs] = tight_subplot(m,n,0.05);
 y_max = -inf; y_min = inf;
 
@@ -574,9 +600,79 @@ if length(unique_stim_type) == 3
     axis tight square;
 end
 
+% -- Weights --
+axes(hs(end-4));
+h1 = imagesc(prefs_lip,prefs_lip,w_lip_lip'); axis  xy; title('LIP->LIP');
+xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
+set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
+% set(h1,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_lip,w_lip_lip'});
+
+axes(hs(end-3));
+h2 = imagesc(prefs_int,prefs_lip,w_lip_int');  axis xy; title('Int->LIP');
+xlabel('\theta_{lip}'); ylabel('\theta_{int}');
+set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
+% set(h2,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_int,w_lip_int'});
+
+axes(hs(end-2));
+h3 = imagesc(prefs_vis,prefs_int,w_int_vis'); axis xy; title('Vis->Int');
+xlabel('\theta_{int}'); ylim([-30 30]);    ylabel('\theta_{vis}');
+set(gca,'xtick',-180:90:180);
+% set(h3,'ButtonDownFcn',{@plot_weight,prefs_int,prefs_vis,w_int_vis'});
+
+axes(hs(end-1));
+h3 = imagesc(prefs_vest,prefs_int,w_int_vest'); axis xy; title('Vest->Int');
+xlabel('\theta_{int}'); ylim([-30 30]);    ylabel('\theta_{vest}');
+set(gca,'xtick',-180:90:180);
+% set(h3,'ButtonDownFcn',{@plot_weight,prefs_int,prefs_vis,w_int_vis'});
+
+colormap hot;
+
 if ION_cluster
     export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s3_Cells%s.png',save_folder,para_override_txt));
     saveas(gcf,sprintf('./result/%s3_Cells%s.fig',save_folder,para_override_txt),'fig');
+end
+disp('Different cells done');
+
+%% ====== Fig.3.5 Different cells, PSTH ======
+
+figure(1003); clf;
+set(gcf,'name','Different cells, PSTH');
+set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
+
+% -- PSTH for all headings --
+
+m = fix(sqrt(N_sample_cell+5));
+n = ceil((N_sample_cell+5)/m);
+[~,hs] = tight_subplot(m,n,0.05);
+y_max = -inf; y_min = inf;
+
+for cc = 1:N_sample_cell
+    axes(hs(cc)); hold on;
+    
+    for ss = 1:length(unique_stim_type)
+        plot(ts,PSTH_correct_mean_allheading(cc,:,ss,1),'linestyle','-','color',colors(unique_stim_type(ss),:),'linew',2.5);
+        plot(ts,PSTH_correct_mean_allheading(cc,:,ss,2),'linestyle','--','color',colors(unique_stim_type(ss),:),'linew',2.5);
+    end
+    
+    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+    
+    title(sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(cc))));
+    
+    if abs(to_calculate_PSTH_cells_ind(cc)-left_targ_ind) == min(abs(to_calculate_PSTH_cells_ind-left_targ_ind)) ...
+            || abs(to_calculate_PSTH_cells_ind(cc) - right_targ_ind) == min(abs(to_calculate_PSTH_cells_ind - right_targ_ind))
+        set(gca,'color','y');
+    end
+    
+    axis tight;
+    y_min = min(y_min,min(ylim));
+    y_max = max(y_max,max(ylim));
+end
+
+set(hs,'ylim',[y_min y_max]);
+
+if ION_cluster
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s3p5_Cells_PSTH%s.png',save_folder,para_override_txt));
+    saveas(gcf,sprintf('./result/%s3p5_Cells_PSTH%s.fig',save_folder,para_override_txt),'fig');
 end
 disp('Different cells done');
 
