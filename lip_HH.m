@@ -37,8 +37,13 @@ else % My own computer
     ION_cluster = 0;
 end
 
+% Override
+% ION_cluster = 1;
+
 % === Switches ===
 if_debug = ~ION_cluster;
+
+h_grouped = [];
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Parameters Start %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -186,16 +191,22 @@ save_folder = '';
 
 % --- "POST": Add heterogeneity in post synaptic parameters ---
 % Variability in:    g       k     dc                   
-vari_weight_post =  [0.2     0.5     0 ;  % vest -> int
+heter_post =  [0.2     0.5     0 ;  % vest -> int
                      0.2     0.5     0 ;  % vis -> int
                      0       0.2   0.1 ;  % int -> lip
                      0       0.2   0.2 ]; % lip -> lip
                  
-vari_weight_post (:) = 0;
+heter_post (:) = 0;
 
 % --- "Normal": Add normal distributed noise in the weight matrix ---
-vari_weight_normal_noise = [2;2;2;2]; %                  
+heter_normal = 0 * [1 1 1 1];  % vest -> int, vis -> int, int -> lip, lip -> lip
 
+% --- "Dropout": Increase sparseness in the weight matrix ---
+heter_dropout = 0.6 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+
+% --- "LogNormal": log normal distribution for each group of weights (diagonal) ---
+heter_lognormal  = 1.2 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+                         
 
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
 para_override_txt = '';
@@ -209,7 +220,9 @@ if nargin >= 1
             if ~strcmp(para_override{ll,1},'save_folder')
                 para_override_txt = [para_override_txt sprintf('_%s_%s',para_override{ll,1},num2str(para_override{ll,2}))];
             else
-                mkdir(['./result/' save_folder]);
+                if ~exist(['./result/' save_folder],'dir')
+                    mkdir(['./result/' save_folder]);
+                end
             end
         else
             fprintf('Parameter ''%s'' not found...\n',para_override{ll,1});
@@ -350,21 +363,21 @@ w_lip_lip = zeros(N_lip,N_lip);
 
 % ==== Heterogeneity Method 1: Add heterogeneity in post synaptic parameters ("POST") ====
          
-g_w_int_vest_heter = (1+randn(1,N_int)*vari_weight_post(1,1)) * g_w_int_vest; % (mean = std)
-k_int_vest_heter = (1+randn(1,N_int)*vari_weight_post(1,2)) * k_int_vest; k_int_vest_heter(k_int_vest_heter<=1) = 1;
-dc_w_int_vest_heter = (1+randn(1,N_int)*vari_weight_post(1,3)) * dc_w_int_vest - randn(1,N_int)*0.1; dc_w_int_vest_heter(dc_w_int_vest_heter>0) = 0;
+g_w_int_vest_heter = (1+randn(1,N_int)*heter_post(1,1)) * g_w_int_vest; % (mean = std)
+k_int_vest_heter = (1+randn(1,N_int)*heter_post(1,2)) * k_int_vest; k_int_vest_heter(k_int_vest_heter<=1) = 1;
+dc_w_int_vest_heter = (1+randn(1,N_int)*heter_post(1,3)) * dc_w_int_vest - randn(1,N_int)*0.1; dc_w_int_vest_heter(dc_w_int_vest_heter>0) = 0;
 
-g_w_int_vis_heter = (1+randn(1,N_int)*vari_weight_post(2,1)) * g_w_int_vis; % (mean = std)
-k_int_vis_heter = (1+randn(1,N_int)*vari_weight_post(2,2)) * k_int_vis;  k_int_vis_heter(k_int_vis_heter<=1) = 1;
-dc_w_int_vis_heter = (1+randn(1,N_int)*vari_weight_post(2,3)) * dc_w_int_vis - randn(1,N_int)*0.1;  dc_w_int_vis_heter(dc_w_int_vis_heter>0) = 0;
+g_w_int_vis_heter = (1+randn(1,N_int)*heter_post(2,1)) * g_w_int_vis; % (mean = std)
+k_int_vis_heter = (1+randn(1,N_int)*heter_post(2,2)) * k_int_vis;  k_int_vis_heter(k_int_vis_heter<=1) = 1;
+dc_w_int_vis_heter = (1+randn(1,N_int)*heter_post(2,3)) * dc_w_int_vis - randn(1,N_int)*0.1;  dc_w_int_vis_heter(dc_w_int_vis_heter>0) = 0;
 
-g_w_lip_int_heter = (1+randn(1,N_lip)*vari_weight_post(3,1)) * g_w_lip_int; % (mean = std)
-k_lip_int_heter = (1+randn(1,N_lip)*vari_weight_post(3,2)) * k_lip_int; k_lip_int_heter(k_lip_int_heter<=1) = 1;
-dc_w_lip_int_heter = (1+randn(1,N_lip)*vari_weight_post(3,3)) * dc_w_lip_int;
+g_w_lip_int_heter = (1+randn(1,N_lip)*heter_post(3,1)) * g_w_lip_int; % (mean = std)
+k_lip_int_heter = (1+randn(1,N_lip)*heter_post(3,2)) * k_lip_int; k_lip_int_heter(k_lip_int_heter<=1) = 1;
+dc_w_lip_int_heter = (1+randn(1,N_lip)*heter_post(3,3)) * dc_w_lip_int;
 
-g_w_lip_lip_heter = (1+randn(1,N_lip)*vari_weight_post(4,1)) * g_w_lip_lip; % (mean = std)
-k_lip_lip_heter = (1+randn(1,N_lip)*vari_weight_post(4,2)) * k_lip_lip; k_lip_lip_heter(k_lip_lip_heter<=1) = 1;
-dc_w_lip_lip_heter = (1+randn(1,N_lip)*vari_weight_post(4,3)) * dc_w_lip_lip;
+g_w_lip_lip_heter = (1+randn(1,N_lip)*heter_post(4,1)) * g_w_lip_lip; % (mean = std)
+k_lip_lip_heter = (1+randn(1,N_lip)*heter_post(4,2)) * k_lip_lip; k_lip_lip_heter(k_lip_lip_heter<=1) = 1;
+dc_w_lip_lip_heter = (1+randn(1,N_lip)*heter_post(4,3)) * dc_w_lip_lip;
 
 for nn=1:N_int
     
@@ -427,12 +440,71 @@ for nn=1:N_lip % For each POST-synaptic cell
         + dc_w_lip_lip_heter(nn)/N_lip;
 end
 
-% ==== Heterogeneity Method 3 : Add Gaussian noise in weights ("Normal") ====
-w_int_vest =  w_int_vest + randn(size(w_int_vest))*std(w_int_vest(:))*vari_weight_normal_noise(1);
-w_int_vis = w_int_vis + randn(size(w_int_vis))*std(w_int_vis(:))*vari_weight_normal_noise(2);
-w_lip_int = w_lip_int + randn(size(w_lip_int))*std(w_lip_int(:))*vari_weight_normal_noise(3);
-w_lip_lip = w_lip_lip + randn(size(w_lip_lip))*std(w_lip_lip(:))*vari_weight_normal_noise(4);
+ws = {'int_vest','int_vis','lip_int','lip_lip'};
 
+for ww = 1:length(ws)
+    
+    % ==== Heterogeneity Method 3 : Add Gaussian noise in weights ("Normal") ====
+    % w_int_vest = w_int_vest + randn(size(w_int_vest))*std(w_int_vest(:))*heter_normal(1);
+    eval(sprintf('w_%s =  w_%s + randn(size(w_%s))*std(w_%s(:))*heter_normal(%g);',ws{ww},ws{ww},ws{ww},ws{ww},ww));
+    
+    % ==== Heterogeneity Method 4: Log normal (proportional to the mean value) ====
+    % w_int_vest = sign(w_int_vest).* abs(w_int_vest).^(1+randn(size(w_int_vest)).* abs(w_int_vest) * heter_lognormal(1));
+    % eval(sprintf('w_%s = sign(w_%s).* abs(w_%s).^(1+randn(size(w_%s)).* abs(w_%s) * heter_lognormal(%g));',...
+    %     ws{ww},ws{ww},ws{ww},ws{ww},ws{ww},ww));
+    
+    % Calculate designed mean and variance
+    eval(sprintf(' m = abs(w_%s); v = (abs(w_%s) * heter_lognormal(%g)).^2;',ws{ww},ws{ww},ww));
+    
+    % Calculate parameters for log normal
+    miu = log(m.^2./sqrt(v+m.^2));
+    sigma = sqrt(log(v./m.^2+1));
+    
+    % Generate lognormal and recover the sign
+    eval(sprintf('w_%s = sign(w_%s) .* exp( miu + randn(size(w_%s)) .* sigma );',ws{ww},ws{ww},ws{ww}));
+
+    % ==== Heterogeneity Method 5: Dropout while keep the mean unchanged ====
+    % w_int_vest(rand(size(w_int_vest))<heter_dropout(1)) = 0;
+    eval(sprintf('w_%s(rand(size(w_%s)) < heter_dropout(%g)) = 0;',ws{ww},ws{ww},ww));
+    % Scale to keep the mean unchanged
+    eval(sprintf('w_%s = w_%s / (1-heter_dropout(%g));',ws{ww},ws{ww},ww));
+    
+end
+
+% %{
+% Just to verify the distribution of diagonals of w_lip_lip 
+result.w_lip_lip = w_lip_lip;
+
+figure(1318); clf; hold on;
+delta_theta = 0;
+
+off_diag = round(delta_theta/(360/size(result.w_lip_lip,1)));
+x = diag(result.w_lip_lip,off_diag);
+
+if range(x)>0
+    [N,edges] = hist(x,min(x):0.0003:max(x));
+    plot([edges edges(end)+edges(2)-edges(1)],[smooth(N,1);0]/sum(N)/(edges(2)-edges(1)),'k-','linew',2);
+end
+
+ylabel('Prob density');
+xlabel(['LIP --> LIP, \Delta\theta = ' num2str(delta_theta)]);
+
+max_y = max(ylim);
+plot(mean(x)*ones(1,2),[0 max_y*1.05],'k--')
+
+h_grouped = [h_grouped gca];
+
+% Return immediately for debugging
+% if nargin == 2 % Save result
+%     for rr = 1:length(output_result)
+%         eval(['result.(output_result{rr}) =' output_result{rr}]);
+%     end
+% else
+%     result =[];
+% end
+% 
+% return;
+%}
 
 if if_debug
     figure(90); clf;
@@ -479,7 +551,7 @@ if if_debug
 %     xlabel('\theta_{vis/vest}');
     
     colormap hot;
-    keyboard;
+    % keyboard;
 end
 
 %  Sensory correlation matrix

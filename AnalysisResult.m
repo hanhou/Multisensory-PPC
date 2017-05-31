@@ -64,7 +64,7 @@ if if_debug
     % plot(ts,mean(rectified_rate_lip(right_targ_ind,:,:,end,1),3),'r');
     plot(ts,mean(rate_lip(left_targ_ind,:,:,end,1),3),'g--');
     plot(ts,mean(rate_lip(right_targ_ind,:,:,end,1),3),'g');
-    % export_fig('-painters','-nocrop','-m2' ,sprintf('./result/test.png'));
+    % export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/test.png'));
     
     %% Example snapshot of population activity (for demo)
     spkCntCent = [1.0];
@@ -154,7 +154,7 @@ else % Not debug, Fig.2a in Beck 2008
     set(gca,'xtick',[-180:90:180]);
     
     if ION_cluster
-        export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s1p5_Fig2a%s.png',save_folder,para_override_txt));
+        export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1p5_Fig2a%s.png',save_folder,para_override_txt));
         saveas(gcf,sprintf('./result/%s1p5_Fig2a%s.fig',save_folder,para_override_txt),'fig');
     end
   %}
@@ -279,7 +279,7 @@ end
 set(to_sync,'ylim',[y_min y_max]);
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s1_Example%s.png',save_folder,para_override_txt));
+    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1_Example%s.png',save_folder,para_override_txt));
     saveas(gcf,sprintf('./result/%s1_Example%s.fig',save_folder,para_override_txt),'fig');
 end
 
@@ -543,8 +543,9 @@ xlim([min(ts),max(ts)]);
 
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s2_Overview%s.png',save_folder,para_override_txt));
+    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s2_Overview%s.png',save_folder,para_override_txt));
     saveas(gcf,sprintf('./result/%s2_Overview%s.fig',save_folder,para_override_txt),'fig');
+    h_grouped = [h_grouped hs(1) hpsy hs(6)]; % Add h_grouped
 end
 disp('Overview done');
 
@@ -591,7 +592,16 @@ if length(unique_stim_type) == 3
     axes(hs(end));
     comb_minus_vest = mean(diff_PSTH_correct_mean_allheading(:,:,3)-diff_PSTH_correct_mean_allheading(:,:,1),2);
     comb_minus_vis = mean(diff_PSTH_correct_mean_allheading(:,:,3)-diff_PSTH_correct_mean_allheading(:,:,2),2);
-    plot(comb_minus_vest,comb_minus_vis,'og','markersize',7,'markerfacecol','g'); hold on;
+    
+    cols = colormap(jet);
+    for cc = 1:N_sample_cell
+        dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3))/(N_sample_cell/4);
+        this_col = cols(round(dis_prop*length(cols)),:);
+        plot(comb_minus_vest(cc),comb_minus_vis(cc),'og','markersize',7,'color',this_col,'linewid',2); hold on;
+    end
+    
+    % Mark left_target and right_target
+    
     xlabel('Comb - Vest'); ylabel('Comb - Vis');
     max_axis = max(abs([ylim xlim]));
     plot([0 0],[-max_axis max_axis],'--k');
@@ -628,8 +638,9 @@ set(gca,'xtick',-180:90:180);
 colormap hot;
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s3_Cells%s.png',save_folder,para_override_txt));
+    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s3_Cells%s.png',save_folder,para_override_txt));
     saveas(gcf,sprintf('./result/%s3_Cells%s.fig',save_folder,para_override_txt),'fig');
+    h_grouped = [h_grouped hs(end)]; % Add h_grouped
 end
 disp('Different cells done');
 
@@ -671,7 +682,7 @@ end
 set(hs,'ylim',[y_min y_max]);
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%s3p5_Cells_PSTH%s.png',save_folder,para_override_txt));
+    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s3p5_Cells_PSTH%s.png',save_folder,para_override_txt));
     saveas(gcf,sprintf('./result/%s3p5_Cells_PSTH%s.fig',save_folder,para_override_txt),'fig');
 end
 disp('Different cells done');
