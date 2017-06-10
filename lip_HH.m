@@ -93,9 +93,9 @@ if ION_cluster
     unique_stim_type = [1 2 3];
     N_rep = 100; % For each condition
 else
-    unique_heading = [-8 0 8];
+    unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     unique_stim_type = [1 2 3];
-    N_rep = 5;
+    N_rep = 50;
 end
 
 % =================== Stimuli ===================
@@ -202,10 +202,10 @@ heter_post (:) = 0;
 heter_normal = 0 * [1 1 1 1];  % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "Dropout": Increase sparseness in the weight matrix ---
-heter_dropout = 0.6 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+heter_dropout = 0 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "LogNormal": log normal distribution for each group of weights (diagonal) ---
-heter_lognormal  = 1.2 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+heter_lognormal  = 0 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
                          
 
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
@@ -783,6 +783,10 @@ rate_int = reshape(rate_int,N_int,trial_dur_total_in_bins,N_rep,length(unique_he
 rate_lip = reshape(rate_lip,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
 RT = reshape(RT,N_rep,length(unique_heading),length(unique_stim_type));
 
+% Generate the correct answer: LEFT = -1, RIGHT = 1; random for 0 headings
+correct_ans_all = (rand(n_parfor_loops,1) < (sign(unique_heading(ss_hh_cheatsheet(:,2))') + 1)/2) * 2 - 1;
+correct_ans_all = reshape(correct_ans_all,N_rep,length(unique_heading),length(unique_stim_type));
+
 % % Pack and save data
 % disp('Saving data...');
 % if if_debug
@@ -791,21 +795,12 @@ RT = reshape(RT,N_rep,length(unique_heading),length(unique_stim_type));
 %     save('./result/last_result.mat','paras','rate_lip','rate_int','RT','-v7.3');
 % end
 
-if if_debug | 1
-    assignin('base','rate_lip', rate_lip);
-    assignin('base','paras', paras);
-    assignin('base','rate_int', rate_int);
-    assignin('base','spikes_target', spikes_target);
-    assignin('base','spikes_vis', spikes_vis);
-    assignin('base','spikes_vest', spikes_vest);
-    assignin('base','spikes_int', spikes_int);
-    assignin('base','spikes_lip', spikes_lip);
-    assignin('base','proba_target_tuning', proba_target_tuning);
-    assignin('base','RT', RT);
-    assignin('base','w_lip_lip', w_lip_lip);
-    assignin('base','w_lip_int', w_lip_int);
-    assignin('base','w_int_vis', w_int_vis);
-    assignin('base','w_int_vest', w_int_vest);
+if if_debug || 1
+    to_assignin = {'rate_lip','paras','rate_int','spikes_target','spikes_vis','spikes_vest','spikes_int','spikes_lip',...
+                   'proba_target_tuning','RT','correct_ans_all','w_lip_lip','w_lip_int','w_int_vis','w_int_vest'};
+    for tta = 1:length(to_assignin)
+        assignin('base',to_assignin{tta},eval(to_assignin{tta}));
+    end
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

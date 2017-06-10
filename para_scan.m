@@ -112,13 +112,26 @@ end
 %% 20170530_scaled drop out and log normal with grouped figure
 clear
 scan = tic;
-save_folder = '20170602_drop0.6_lognorm1.2/';
+% save_folder = '20170602_drop0.6_lognorm1.2/';
+save_folder = '20170609_rescan_with_SVM_0.6_1.8/';
 
-% drop_outs = 0.6*ones(1,4);
-% lognormal_ratio = 1.2*ones(1,5);
+% Coarse
+% drop_outs = 0:0.1:0.8;
+% lognormal_ratio = 0:0.3:4;
 
-drop_outs = 0.4:0.1:0.9;
-lognormal_ratio = 0:0.2:1.5;
+% Fine
+% drop_outs = 0.4:0.1:0.9;
+% lognormal_ratio = 0:0.2:1.5;
+
+% Fixed
+drop_outs = 0.6*ones(1,4);
+lognormal_ratio = 1.8*ones(1,5);
+
+% Test
+% drop_outs = 0.6;
+% lognormal_ratio = 1.2;
+
+
 initiated = 0;
 
 total_n = length(drop_outs)*length(lognormal_ratio);
@@ -130,7 +143,9 @@ for dd = 1:length(drop_outs)
         result = lip_HH({'heter_dropout',heter_dropout;'heter_lognormal',heter_lognormal;...
             'save_folder',save_folder},{'h_grouped'});
         
-        fprintf('=== Grouped progress: %g / %g ===\n',(dd-1)*length(lognormal_ratio)+ll,total_n));
+        finished = (dd-1)*length(lognormal_ratio)+ll;
+        fprintf('=== Grouped progress: %g / %g ===\n',finished,total_n);
+        fprintf('=== Estimated remaining time: %s ===\n', datestr(toc(scan)/finished*(total_n-finished)/24/3600,'HH:MM'));
         
         h_grouped = result.h_grouped;
         
