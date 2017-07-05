@@ -200,13 +200,14 @@ correct_rate_maxpos = sum(choices_maxpos(:) == correct_ans_all(:)) / numel(corre
 %     psychometric = [fake_psy ; psychometric];
 
 % ------------ SVM decoder --------------
-train_ratio = 0.5;
+train_ratio = 0.3;
 
 % To make sure each condition always has the same number of trials.
 n_train_each_condition = round(N_rep * train_ratio); 
 n_test_each_condition = N_rep - n_train_each_condition;
 n_train = n_train_each_condition * length(unique_heading) * length(unique_stim_type); 
 n_test = n_test_each_condition * length(unique_heading) * length(unique_stim_type);
+
 rate_lip_to_train = nan(n_train,N_lip);  correct_ans_train = nan(n_train,1);
 rate_lip_to_test = nan(n_test,N_lip);  correct_ans_test = nan(n_test,1);
 
@@ -229,15 +230,16 @@ for ss = 1:length(unique_stim_type)
 end
 
 % Train linear SVM, try different Cs
-Cs = 10.^(-3:0.5:0);
+% Cs = 10.^(-3:0.5:0);
+Cs = 1e-5;
 correct_rate_svm_test_Cs = nan(1,length(Cs));
 
 for ccs = 1:length(Cs)
-    try
-        svm_model_Cs{ccs} = svmtrain(rate_lip_to_train,correct_ans_train,'boxconstraint',Cs(ccs));
+%     try
+        svm_model_Cs{ccs} = svmtrain(rate_lip_to_train,correct_ans_train,'boxconstraint',Cs(ccs),'tol',1e-7);
         choices_svm_test_Cs{ccs} = svmclassify(svm_model_Cs{ccs},rate_lip_to_test);
         correct_rate_svm_test_Cs(ccs) = sum(choices_svm_test_Cs{ccs} == correct_ans_test) / length(correct_ans_test);
-    end
+%     end
 end
 
 % Select the best C
@@ -248,6 +250,7 @@ choices_svm_test = choices_svm_test_Cs{bestC};
 correct_rate_svm_test = correct_rate_svm_test_Cs(bestC);
 
 svm_weight = -svm_model.SupportVectors'*svm_model.Alpha;
+svm_weight = svm_weight./svm_model.ScaleData.scaleFactor'; % MUST ADD THIS!!!!
 
 % SVM train performance
 choices_svm_train = svmclassify(svm_model,rate_lip_to_train);
@@ -265,17 +268,76 @@ choices_svm_all = reshape(choices_svm_all,N_rep,length(unique_heading),length(un
 % choices = choices_maxpos;
 choices = choices_svm_all;
 
-%% ====== Fig.0.5 Decoding methods ======
+% test_svm
+
+%% ====== SVM toy test: Generate uncorrelated population activity to test SVM decoder (after talk 20170609) ======
+
+rate_lip_toy_to_train = nan(n_train,N_lip);
+rate_lip_toy_to_test = nan(n_test,N_lip);
+aver_population_act = nan(N_lip,length(unique_heading),length(unique_stim_type));
+
+% Generate toy train and test sets
+n = 0;
+for ss = 1:length(unique_stim_type)
+    for hh = 1:length(unique_heading)
+        n = n + 1;
+        train_this = randperm(N_rep,n_train_each_condition);
+        
+        where_train_this = (n-1)*n_train_each_condition + 1 : n*n_train_each_condition;
+        
+        % Uncorrelated Poisson noise over the averaged population activity for this condition
+        aver_this = mean(rate_lip(:,end,:,hh,ss),3)';
+%         rate_lip_toy_to_train(where_train_this,:) = poissrnd(repmat(aver_this,length(where_train_this),1));
+        rate_lip_toy_to_train(where_train_this,:) = (1+randn(length(where_train_this),N_lip)*4)...
+                                                    .*repmat(aver_this,length(where_train_this),1);
+        % Correct answer is the same as real train set
+        
+        aver_population_act(:,hh,ss) = aver_this;
+    end
+end
+
+rate_lip_toy_to_train(rate_lip_toy_to_train<0) = 0; % Rectify
+
+% %{
+% Train linear SVM, try different Cs
+% Cs = 10.^(-2.5:0.5:0);
+% Cs = 1e-5;
+correct_rate_toy_svm_train_Cs = nan(1,length(Cs));
+svm_toy_model_Cs = [];
+
+for ccs = 1:length(Cs)
+   try
+        svm_toy_model_Cs{ccs} = svmtrain(rate_lip_toy_to_train,correct_ans_train,'boxconstraint',Cs(ccs),'autoscale',1,'tol',1e-7);
+        choices_svm_toy_train_Cs{ccs} = svmclassify(svm_toy_model_Cs{ccs},rate_lip_toy_to_train); % Just training set for simplification
+        correct_rate_toy_svm_train_Cs(ccs) = sum(choices_svm_toy_train_Cs{ccs} == correct_ans_train) / length(correct_ans_train);
+   end
+end
+
+% Select the best C
+fprintf('Correct rate of (toy) SVM with different Cs: \n%s\n',num2str(correct_rate_toy_svm_train_Cs));
+[~,bestToyC] = max(correct_rate_toy_svm_train_Cs);
+svm_toy_model = svm_toy_model_Cs{bestToyC};
+
+svm_toy_weight = -svm_toy_model.SupportVectors'*svm_toy_model.Alpha; 
+svm_toy_weight = svm_toy_weight./svm_toy_model.ScaleData.scaleFactor'; % MUST ADD THIS!!!!
+
+% Turn to the same format
+choices_svm_toy_train = reshape(choices_svm_toy_train_Cs{bestToyC},n_train_each_condition,length(unique_heading),length(unique_stim_type));    
+%}
+
+%% ====== Fig.0.5 Compare MaxPos and SVM (training, test) ======
+% %{
 % Compare different decoding methods (MaxPos, SVM_all, SVM_test)
 figure(2135); clf;
 set(gcf,'name','Decoding methods');
-set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
+set(gcf,'uni','norm','pos',[0.013        0.06       0.972       0.464]);
 
 decoding_methods = {choices_maxpos, 'MaxPos';
                     choices_svm_all, 'SVM all';
                     choices_svm_train, 'SVM train';
-                    choices_svm_test, 'SVM test'};
-hs = tight_subplot(2,size(decoding_methods,1),0.05);
+                    choices_svm_test, 'SVM test';
+                    choices_svm_toy_train, 'SVM toy train'};
+hs = tight_subplot(2,size(decoding_methods,1),0.05,0.1);
 
 % ======= Behavior ========
 
@@ -348,97 +410,7 @@ disp('Decoding done!');
 
 %}
 
-
-%% ====== Fig. 1 Example Pref and Null traces (correct only) ======
-%%{
-
-to_plot_abs_headings = [0 4 8];
-to_plot_cell_ind = right_targ_ind;  % Cell-based plotting
-n_to_plot_trace = 5;
-
-set(figure(1001),'name','Example PSTHs (correct only)'); clf;
-set(gcf,'uni','norm','pos',[0.005       0.056       0.33*length(to_plot_abs_headings)       0.832]);
-hs = tight_subplot(3,2*length(to_plot_abs_headings),[0.04 0.03]);
-
-pref_null = [RIGHT LEFT]; % Default: PREF = RIGHT, NULL = LEFT
-if prefs_lip(to_plot_cell_ind)<0  % If this target cell has a negative pref heading
-    pref_null = fliplr(pref_null);
-end
-
-y_max = -inf; y_min = inf; to_sync = [];
-
-for tph = 1:length(to_plot_abs_headings)
-
-    for ss = 1:length(unique_stim_type)
-    
-        for cc = 1:2 % Pref and Null
-            
-            this_heading_ind = find(unique_heading == to_plot_abs_headings(tph) * pref_null(cc),1);
-            this_correct_ind = find(choices(:,this_heading_ind,ss) == pref_null(cc)); % Only correct trials
-            
-            for tt = 1:ceil(length(this_correct_ind)/n_to_plot_trace):length(this_correct_ind)
-                
-                RT_this = RT(this_correct_ind(tt),this_heading_ind,ss);
-                rate_at_RT = rate_lip(to_plot_cell_ind,find(ts<=RT_this,1,'last'),this_correct_ind(tt),this_heading_ind,ss);
-                
-                % --- LIP ---
-                axes(hs(6*(tph-1)+ss));
-                
-                if cc == 1 % Pref
-                    plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
-                    plot([RT_this RT_this],[rate_at_RT+5 rate_at_RT-5],'m','linew',5);
-                else
-                    plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1);
-                    plot([RT_this RT_this],[rate_at_RT+5 rate_at_RT-5],'k','linew',5);
-                end
-                
-                axis tight; y_min = min(y_min,min(ylim)); y_max = max(y_max,max(ylim)); to_sync = [to_sync gca];
-                
-                % --- Int ---
-                axes(hs(6*(tph-1)+ss+3));
-                if cc == 1 % Pref
-                    plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
-                else
-                    plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1); hold on;
-                end
-                %     if if_bounded
-                %         plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
-                % %         ylim([min(ylim),decis_thres*1.1]);
-                %     end
-                
-            end
-        end
-        
-        axes(hs(6*(tph-1)+ss));
-        title(sprintf('rate\\_lip, pref = %g, |heading| = %g',prefs_lip(to_plot_cell_ind), to_plot_abs_headings(tph)));
-        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
-        axis tight;
-        if if_bounded
-            plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
-            %         ylim([min(ylim),decis_thres(k)*1.1]);
-        end
-        
-        axes(hs(6*(tph-1)+ss+3));
-        title(sprintf('rate\\_int'));
-        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
-        axis tight;
-        
-    end
-    
-end
-
-set(to_sync,'ylim',[y_min y_max]);
-
-if ION_cluster
-    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1_Example%s.png',save_folder,para_override_txt));
-    saveas(gcf,sprintf('./result/%s1_Example%s.fig',save_folder,para_override_txt),'fig');
-end
-
-disp('Example done');
-
-%}
-
-%% ====== Fig.2 Overview ======
+%% ====== Fig.1 Overview ======
 figure(1000); clf;
 set(gcf,'name','Overview');
 set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
@@ -695,11 +667,102 @@ xlim([min(ts),max(ts)]);
 
 
 if ION_cluster
-    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s2_Overview%s.png',save_folder,para_override_txt));
-    saveas(gcf,sprintf('./result/%s2_Overview%s.fig',save_folder,para_override_txt),'fig');
+    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1_Overview%s.png',save_folder,para_override_txt));
+    saveas(gcf,sprintf('./result/%s1_Overview%s.fig',save_folder,para_override_txt),'fig');
     h_grouped = [h_grouped hs(1) hpsy hs(6)]; % Add h_grouped
 end
 disp('Overview done');
+
+%% ====== Fig.2 Example Pref and Null traces (correct only) ======
+%%{
+
+to_plot_abs_headings = [0 4 8];
+% to_plot_cell_ind = right_targ_ind;  % Cell-based plotting
+[~, ind] = max(mean(mean(diff_PSTH_correct_mean_allheading(:,:,:),2),3),[],1);
+to_plot_cell_ind = to_calculate_PSTH_cells_ind(ind);
+n_to_plot_trace = 5;
+
+set(figure(1001),'name','Example PSTHs (correct only)'); clf;
+set(gcf,'uni','norm','pos',[0.005       0.056       0.33*length(to_plot_abs_headings)       0.832]);
+hs = tight_subplot(3,2*length(to_plot_abs_headings),[0.04 0.03]);
+
+pref_null = [RIGHT LEFT]; % Default: PREF = RIGHT, NULL = LEFT
+if prefs_lip(to_plot_cell_ind)<0  % If this target cell has a negative pref heading
+    pref_null = fliplr(pref_null);
+end
+
+y_max = -inf; y_min = inf; to_sync = [];
+
+for tph = 1:length(to_plot_abs_headings)
+
+    for ss = 1:length(unique_stim_type)
+    
+        for cc = 1:2 % Pref and Null
+            
+            this_heading_ind = find(unique_heading == to_plot_abs_headings(tph) * pref_null(cc),1);
+            this_correct_ind = find(choices(:,this_heading_ind,ss) == pref_null(cc)); % Only correct trials
+            
+            for tt = 1:ceil(length(this_correct_ind)/n_to_plot_trace):length(this_correct_ind)
+                
+                RT_this = RT(this_correct_ind(tt),this_heading_ind,ss);
+                rate_at_RT = rate_lip(to_plot_cell_ind,find(ts<=RT_this,1,'last'),this_correct_ind(tt),this_heading_ind,ss);
+                
+                % --- LIP ---
+                axes(hs(6*(tph-1)+ss));
+                
+                if cc == 1 % Pref
+                    plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
+                    plot([RT_this RT_this],[rate_at_RT+5 rate_at_RT-5],'m','linew',5);
+                else
+                    plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1);
+                    plot([RT_this RT_this],[rate_at_RT+5 rate_at_RT-5],'k','linew',5);
+                end
+                
+                axis tight; y_min = min(y_min,min(ylim)); y_max = max(y_max,max(ylim)); to_sync = [to_sync gca];
+                
+                % --- Int ---
+                axes(hs(6*(tph-1)+ss+3));
+                if cc == 1 % Pref
+                    plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
+                else
+                    plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1); hold on;
+                end
+                %     if if_bounded
+                %         plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
+                % %         ylim([min(ylim),decis_thres*1.1]);
+                %     end
+                
+            end
+        end
+        
+        axes(hs(6*(tph-1)+ss));
+        title(sprintf('rate\\_lip, pref = %g, |heading| = %g',prefs_lip(to_plot_cell_ind), to_plot_abs_headings(tph)));
+        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
+        axis tight;
+        if if_bounded
+            plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
+            %         ylim([min(ylim),decis_thres(k)*1.1]);
+        end
+        
+        axes(hs(6*(tph-1)+ss+3));
+        title(sprintf('rate\\_int'));
+        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
+        axis tight;
+        
+    end
+    
+end
+
+set(to_sync,'ylim',[y_min y_max]);
+
+if ION_cluster
+    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s2_Example%s.png',save_folder,para_override_txt));
+    saveas(gcf,sprintf('./result/%s2_Example%s.fig',save_folder,para_override_txt),'fig');
+end
+
+disp('Example done');
+
+%}
 
 %% ====== Fig.3 Different cells, delta PSTH ======
 
@@ -819,7 +882,6 @@ if ION_cluster
 end
 disp('Different cells done');
 
-
 %% ====== Fig.4 Heterogeneity and Decoding Weights ========
 if length(unique_stim_type) == 3
     
@@ -869,6 +931,8 @@ if length(unique_stim_type) == 3
         plot(xx(cc),yy(cc),'og','markersize',7,'color',this_col,'linewid',2); hold on;
     end
     
+    % plot(prefs_lip,svm_toy_weight,'m','linew',2);
+    
     xlabel('Prefs_{LIP}'); ylabel('SVM weight');
     title(sprintf('Best C = %g, CR = %g',Cs(bestC),correct_rate_svm_test_Cs(bestC)));
     
@@ -903,6 +967,5 @@ end
 end
 
 %%
-
 analysis_time = toc(analysis_time)
 disp('---- All done ----')

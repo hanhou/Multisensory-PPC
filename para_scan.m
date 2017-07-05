@@ -113,7 +113,8 @@ end
 clear
 scan = tic;
 % save_folder = '20170602_drop0.6_lognorm1.2/';
-save_folder = '20170609_rescan_with_SVM_0.6_1.8/';
+% save_folder = '20170609_rescan_with_SVM_0.6_1.8/';
+save_folder = '20170613_SVM_rescaled_and_weight_noise_corr_-1_1.5/';
 
 % Coarse
 % drop_outs = 0:0.1:0.8;
@@ -124,26 +125,34 @@ save_folder = '20170609_rescan_with_SVM_0.6_1.8/';
 % lognormal_ratio = 0:0.2:1.5;
 
 % Fixed
-drop_outs = 0.6*ones(1,4);
-lognormal_ratio = 1.8*ones(1,5);
+% drop_outs = 0.6*ones(1,4);
+% lognormal_ratio = 1.8*ones(1,5);
 
 % Test
-% drop_outs = 0.6;
-% lognormal_ratio = 1.2;
+% xs = 0.6 ; x_name = 'drop_outs'; 
+% ys = 1.2; y_name = 'lognormal_ratio';
 
+% log-normal and vis/vest negative noise correlation
+% xs = 0:-0.1:-1;  x_name = 'vis_vest_weight_noise_cor';
+% ys = 0:0.3:4;  y_name = 'heter_lognormal'; 
+
+% xs = 0:-0.5:-2;  x_name = 'vis_vest_weight_noise_cor';
+% ys = 0:0.5:3;  y_name = 'heter_lognormal'; 
+
+xs = -1*ones(1,3);  x_name = 'vis_vest_weight_noise_cor';
+ys = 1.5*ones(1,4);  y_name = 'heter_lognormal'; 
 
 initiated = 0;
 
-total_n = length(drop_outs)*length(lognormal_ratio);
+total_n = length(xs)*length(ys);
 
-for dd = 1:length(drop_outs)
-    for ll = 1:length(lognormal_ratio)
-        heter_dropout = ones(1,4)*drop_outs(dd);
-        heter_lognormal = ones(1,4)*lognormal_ratio(ll);
-        result = lip_HH({'heter_dropout',heter_dropout;'heter_lognormal',heter_lognormal;...
+for xx = 1:length(xs)
+    for yy = 1:length(ys)
+        
+        result = lip_HH({x_name, xs(xx); y_name, ones(1,4)*ys(yy);...
             'save_folder',save_folder},{'h_grouped'});
         
-        finished = (dd-1)*length(lognormal_ratio)+ll;
+        finished = (xx-1)*length(ys)+yy;
         fprintf('=== Grouped progress: %g / %g ===\n',finished,total_n);
         fprintf('=== Estimated remaining time: %s ===\n', datestr(toc(scan)/finished*(total_n-finished)/24/3600,'HH:MM'));
         
@@ -154,7 +163,7 @@ for dd = 1:length(drop_outs)
             for ff = 1:length(h_grouped)
                 figure(1700+ff); clf; 
                 set(gcf,'uni','norm','pos',[0.051       0.068       0.914        0.79]);
-                hs{ff} = tight_subplot(length(drop_outs),length(lognormal_ratio),0.02); % Column-wise
+                hs{ff} = tight_subplot(length(xs),length(ys),0.02); % Column-wise
             end
             initiated = 1;
         end
@@ -162,17 +171,18 @@ for dd = 1:length(drop_outs)
         % Copy grouped figure
         for ff = 1:length(h_grouped)
             this_f = figure(1700+ff);
+            set(gcf,'name',sprintf('%s, %s',x_name,y_name));
             h_copyed = copyobj(h_grouped(ff),this_f);
-            linkprop([hs{ff}(dd+(ll-1)*length(drop_outs)),h_copyed],'pos'); % Put the figure into subfigure
+            linkprop([hs{ff}(xx+(yy-1)*length(xs)),h_copyed],'pos'); % Put the figure into subfigure
             
-            if ~(ll==1 && dd==length(drop_outs))
+            if ~(yy==1 && xx==length(xs))
                 set(h_copyed,'xtick',[],'ytick',[]);
             end
             
             xlabel(h_copyed,''); ylabel(h_copyed,''); title(h_copyed,'');
             
-            if ll == 1;  ylabel(h_copyed,['dropout = ' num2str(drop_outs(dd))]); end
-            if dd == 1;  title(h_copyed,['lognorm = ' num2str(lognormal_ratio(ll))]); end
+            if yy == 1;  ylabel(h_copyed,num2str(xs(xx))); end
+            if xx == 1;  title(h_copyed,num2str(ys(yy))); end
             drawnow;    
         end
     end
@@ -187,13 +197,15 @@ for ff = 1:length(h_grouped)
     % Adjust
     hhs = findobj(gcf,'type','axes');
     axis(hhs,'tight');
-    linkaxes(hhs,'x');
-%     
-%     for i=1:length(hhs)
-%         axes(hhs(i));
-%         pos=get(gca,'pos');
-%         set(gca,'pos',[pos(1:2) pos(3)*1.32 pos(4)*1.14])
-%     end
+    % linkaxes(hhs,'x');
+    
+    %{
+        for i=1:length(hhs)
+            axes(hhs(i));
+            pos=get(gca,'pos');
+            set(gca,'pos',[pos(1:2) pos(3)/1.32 pos(4)/1.14])
+        end
+    %}
     
     % Save figure
     export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%sGrouped_%g.png',save_folder,ff));

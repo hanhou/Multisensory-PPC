@@ -93,9 +93,9 @@ if ION_cluster
     unique_stim_type = [1 2 3];
     N_rep = 100; % For each condition
 else
-    unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
+    unique_heading = [-8 0 8];
     unique_stim_type = [1 2 3];
-    N_rep = 50;
+    N_rep = 5;
 end
 
 % =================== Stimuli ===================
@@ -202,11 +202,11 @@ heter_post (:) = 0;
 heter_normal = 0 * [1 1 1 1];  % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "Dropout": Increase sparseness in the weight matrix ---
-heter_dropout = 0 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+heter_dropout = 0.6 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "LogNormal": log normal distribution for each group of weights (diagonal) ---
-heter_lognormal  = 0 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
-                         
+heter_lognormal  = 1 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+vis_vest_weight_noise_cor = -0.5;  % Controls the correlation between noise of weight in vest -> int and vis -> int
 
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
 para_override_txt = '';
@@ -442,6 +442,9 @@ end
 
 ws = {'int_vest','int_vis','lip_int','lip_lip'};
 
+w_old_int_vest = w_int_vest;
+w_old_int_vis = w_int_vis;
+
 for ww = 1:length(ws)
     
     % ==== Heterogeneity Method 3 : Add Gaussian noise in weights ("Normal") ====
@@ -493,6 +496,22 @@ max_y = max(ylim);
 plot(mean(x)*ones(1,2),[0 max_y*1.05],'k--')
 
 h_grouped = [h_grouped gca];
+
+%  -- Noise correlation in int_vest and int_vis (quick and dirty) 20170613--
+%%
+figure(128); clf
+vest_noise = w_int_vest - w_old_int_vest;
+vis_noise = w_int_vis - w_old_int_vis;
+plot(vest_noise,vis_noise,'k.');
+
+vest_correlated = (1-vis_vest_weight_noise_cor) * vest_noise + vis_vest_weight_noise_cor * vis_noise;
+vis_correlated =  vis_vest_weight_noise_cor * vest_noise + (1-vis_vest_weight_noise_cor) * vis_noise;
+hold on; plot(vest_correlated,vis_correlated,'r.');
+[r,p] = corr(vest_correlated(:),vis_correlated(:));
+title(sprintf('r = %g, p = %g',r,p));
+%%
+w_int_vest = w_old_int_vest + vest_correlated;
+w_int_vis = w_old_int_vis + vis_correlated;
 
 % Return immediately for debugging
 % if nargin == 2 % Save result
