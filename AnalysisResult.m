@@ -154,8 +154,8 @@ else % Not debug, Fig.2a in Beck 2008
     set(gca,'xtick',-180:90:180);
     
     if ION_cluster
-        export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1p5_Fig2a%s.png',save_folder,para_override_txt));
-        saveas(gcf,sprintf('./result/%s1p5_Fig2a%s.fig',save_folder,para_override_txt),'fig');
+        export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s0p1_Fig2a%s.png',save_folder,para_override_txt));
+        saveas(gcf,sprintf('./result/%s0p1_Fig2a%s.fig',save_folder,para_override_txt),'fig');
     end
   %}
 end
@@ -531,11 +531,21 @@ N_sample_cell = length(to_calculate_PSTH_cells_ind);
 % to_plot_grouped_PSTH = find(to_calculate_PSTH_cells_ind == right_targ_ind);
 
 to_flip = prefs_lip(to_calculate_PSTH_cells_ind) < 0;
+
 PSTH_correct_mean_headings = nan(N_sample_cell,length(ts),length(unique_stim_type),length(unique_abs_heading),2);
+PSTH_correct_mean_headings_norm = nan(N_sample_cell,length(ts),length(unique_stim_type),length(unique_abs_heading),2);
 PSTH_correct_mean_allheading = nan(N_sample_cell,length(ts),length(unique_stim_type),2);
+PSTH_correct_mean_allheading_norm = nan(N_sample_cell,length(ts),length(unique_stim_type),2);
+
 pref_null = [RIGHT LEFT];
 
-% === Group PSTH data ===
+% === Calculate cells' dynamic range for normalization HH20170714 ===
+norm_time_range = 0 < ts;
+dynamic_max = max(reshape(rate_lip(to_calculate_PSTH_cells_ind,norm_time_range,:,:,:),N_sample_cell,[]),[],2);
+dynamic_min = min(reshape(rate_lip(to_calculate_PSTH_cells_ind,norm_time_range,:,:,:),N_sample_cell,[]),[],2);
+% figure(); plot(dynamic_max); hold on; plot(dynamic_min)
+
+% === Group PSTH data and Norm_PSTH data ===
 
 for ss = 1:length(unique_stim_type)
     
@@ -543,6 +553,7 @@ for ss = 1:length(unique_stim_type)
     
     for cc = 1:2 % Pref and Null
         PSTH_cache = [];
+        PSTH_cache_norm = [];
          
         for abshh = 1:length(unique_abs_heading)         % For different abs(headings)
             % Assuming PREF = RIGHT for all the cells
@@ -553,8 +564,12 @@ for ss = 1:length(unique_stim_type)
             PSTH_correct_raw_this = rate_lip(to_calculate_PSTH_cells_ind,:,this_correct_ind,this_heading_ind,ss);
             PSTH_correct_mean_headings(:,:,ss,abshh,cc) = mean(PSTH_correct_raw_this,3);
             
+            PSTH_correct_raw_this_norm = bsxfun(@rdivide,bsxfun(@minus,PSTH_correct_raw_this,dynamic_min),(dynamic_max-dynamic_min));
+            PSTH_correct_mean_headings_norm(:,:,ss,abshh,cc) = mean(PSTH_correct_raw_this_norm,3);
+            
             % PSTH grouped cache for all headings
             PSTH_cache = cat(3,PSTH_cache,PSTH_correct_raw_this);
+            PSTH_cache_norm = cat(3,PSTH_cache_norm,PSTH_correct_raw_this_norm);
 
             % For VarCE: all choice
             if ~(unique_abs_heading(abshh)==0 && cc==2) % Skip abs(heading) = 0 and cc = 2 because cc = 1 already includes all trials for 0 heading
@@ -566,22 +581,29 @@ for ss = 1:length(unique_stim_type)
         
         % PSTH for all headings
         PSTH_correct_mean_allheading(:,:,ss,cc) = mean(PSTH_cache,3);
+        PSTH_correct_mean_allheading_norm(:,:,ss,cc) = mean(PSTH_cache_norm,3);
     
     end
 end
 % Flip pref and null if PREF = LEFT for some of the cells
 v = version;
 
-if str2num(v(findstr(v,'R')+1:findstr(v,'R')+4)) >= 2014
+if str2num(v(findstr(v,'R')+1:findstr(v,'R')+4)) >= 2014   % Matlab version issue
     PSTH_correct_mean_headings(to_flip,:,:,:,:) = flip(PSTH_correct_mean_headings(to_flip,:,:,:,:),5);
     PSTH_correct_mean_allheading(to_flip,:,:,:) = flip(PSTH_correct_mean_allheading(to_flip,:,:,:),4);
+    PSTH_correct_mean_headings_norm(to_flip,:,:,:,:) = flip(PSTH_correct_mean_headings_norm(to_flip,:,:,:,:),5);
+    PSTH_correct_mean_allheading_norm(to_flip,:,:,:) = flip(PSTH_correct_mean_allheading_norm(to_flip,:,:,:),4);
 else
     PSTH_correct_mean_headings(to_flip,:,:,:,:) = flipdim(PSTH_correct_mean_headings(to_flip,:,:,:,:),5);
     PSTH_correct_mean_allheading(to_flip,:,:,:) = flipdim(PSTH_correct_mean_allheading(to_flip,:,:,:),4);    
+    PSTH_correct_mean_headings_norm(to_flip,:,:,:,:) = flipdim(PSTH_correct_mean_headings_norm(to_flip,:,:,:,:),5);
+    PSTH_correct_mean_allheading_norm(to_flip,:,:,:) = flipdim(PSTH_correct_mean_allheading_norm(to_flip,:,:,:),4);    
 end
 
 diff_PSTH_correct_mean_headings = - diff(PSTH_correct_mean_headings,[],5);
 diff_PSTH_correct_mean_allheading = - diff(PSTH_correct_mean_allheading,[],4);
+diff_PSTH_correct_mean_headings_norm = - diff(PSTH_correct_mean_headings_norm,[],5);
+diff_PSTH_correct_mean_allheading_norm = - diff(PSTH_correct_mean_allheading_norm,[],4);
 
 % -- Plotting --
 y_max = -inf; y_min = inf;
@@ -654,7 +676,6 @@ y_max = max(y_max,max(ylim));
 
 set(hs(7:12),'ylim',[y_min y_max]);
 
-
 % ====== VarCE ======
 axes(hs(3)); hold on; title('VarCE');
 
@@ -669,6 +690,109 @@ xlim([min(ts),max(ts)]);
 if ION_cluster
     export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1_Overview%s.png',save_folder,para_override_txt));
     saveas(gcf,sprintf('./result/%s1_Overview%s.fig',save_folder,para_override_txt),'fig');
+    h_grouped = [h_grouped hs(1) hpsy hs(6)]; % Add h_grouped
+end
+disp('Overview done');
+
+%% ====== Fig.1.5 Overview_normalized ======
+figure(7141706); clf;
+set(gcf,'name','Overview_normalized');
+set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
+
+hs = tight_subplot(3,4,0.05);
+
+% -- Plotting PSTH / norm PSTH, all in one --
+yyy = reshape(PSTH_correct_mean_allheading,N_sample_cell,length(ts),[]);
+h = SeriesComparison(yyy,ts,...
+    'Colors',colors,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
+    'ErrorBar',2,'Xlabel',[],'axes',hs(1));
+legend off;
+plot(hs(1),t_motion,vel/max(vel)*max(ylim)/5,'k--'); axis tight;
+title(hs(1),'raw');
+
+yyy = reshape(PSTH_correct_mean_allheading_norm,N_sample_cell,length(ts),[]);
+h = SeriesComparison(yyy,ts,...
+    'Colors',colors,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
+    'ErrorBar',2,'Xlabel',[],'axes',hs(2));
+legend off;
+plot(hs(2),t_motion,vel/max(vel)*max(ylim)/5,'k--'); axis tight;
+title(hs(2),'norm');
+
+% -- Plotting norm PSTHs, grouped by stim type, different angles --
+y_max = -inf; y_min = inf;
+colors_hue = [240 0 120]/360;
+
+for ss = 1:length(unique_stim_type)
+    yyy = squeeze(reshape(mean(PSTH_correct_mean_headings_norm(:,:,ss,:,:),1),1,[],1,length(unique_abs_heading)*2));
+    yyy = shiftdim(yyy,-1);
+    
+    colors_angles_hsv(:,2) = linspace(0.2,1,length(unique_abs_heading));
+    colors_angles_hsv(:,1) = colors_hue(ss);
+    colors_angles_hsv(:,3) = 0.9;
+    colors_angles = hsv2rgb(colors_angles_hsv);
+    colors_angles = mat2cell(colors_angles,ones(length(unique_abs_heading),1));
+    
+    h = SeriesComparison(yyy,ts,...
+        'Colors',colors_angles,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
+        'ErrorBar',0,'Xlabel',[],'axes',hs(3+ss));
+    legend off;
+    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+
+    axis tight;
+    y_min = min(y_min,min(ylim));
+    y_max = max(y_max,max(ylim));
+    xlim([min(ts),max(ts)]);
+end
+
+% title(hs(4),sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(to_plot_grouped_PSTH))));
+title(hs(4),sprintf('Grouped %g cells',N_sample_cell));
+
+set(hs(4:6),'ylim',[y_min y_max]);
+
+% =====  Delta-PSTH (stim type), different heading, correct only ====
+y_max = -inf; y_min = inf;
+
+for abshh = 1:length(unique_abs_heading)
+    
+    axes(hs(6+abshh)); hold on;
+    
+    for ss = 1:length(unique_stim_type)
+        plot(ts,mean(diff_PSTH_correct_mean_headings_norm(:,:,ss,abshh),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+    end
+    if length(unique_stim_type) == 3
+        plot(ts,mean(sum(diff_PSTH_correct_mean_headings_norm(:,:,[1 2],abshh),3),1),'k--');
+    end
+    title(sprintf('|heading| = %g',unique_abs_heading(abshh)));
+    
+    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+    axis tight;
+    y_min = min(y_min,min(ylim));
+    y_max = max(y_max,max(ylim));
+end
+
+% ======= Delta-PSTH, all heading, correct only =====
+axes(hs(12)); hold on;    title('All headings');
+
+for ss = 1:length(unique_stim_type)
+    plot(ts,mean(diff_PSTH_correct_mean_allheading_norm(:,:,ss),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+%     errorbar(ts,mean(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),1),...
+%         std(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),[],1)/sqrt(length(to_plot_grouped_PSTH)),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+end
+if length(unique_stim_type) == 3
+    plot(ts,mean(sum(diff_PSTH_correct_mean_allheading_norm(:,:,[1 2]),3),1),'k--');
+end
+plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+
+axis tight;
+y_min = min(y_min,min(ylim));
+y_max = max(y_max,max(ylim));
+
+set(hs(7:12),'ylim',[y_min y_max]);
+
+
+if ION_cluster
+    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1p5_Overview_norm%s.png',save_folder,para_override_txt));
+    saveas(gcf,sprintf('./result/%s1p5_Overview_norm%s.fig',save_folder,para_override_txt),'fig');
     h_grouped = [h_grouped hs(1) hpsy hs(6)]; % Add h_grouped
 end
 disp('Overview done');
