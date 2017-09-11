@@ -660,14 +660,20 @@ end
 % ======= Delta-PSTH, all heading, correct only =====
 axes(hs(12)); hold on;    title('All headings');
 
+mean_diff_PSTH_correct_allheading = nan(length(ts),length(unique_stim_type)); % Save for fitting real data. HH20170808
+
 for ss = 1:length(unique_stim_type)
-    plot(ts,mean(diff_PSTH_correct_mean_allheading(:,:,ss),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+    mean_diff_PSTH_correct_allheading(:,ss) = mean(diff_PSTH_correct_mean_allheading(:,:,ss),1);
+    plot(ts,mean_diff_PSTH_correct_allheading(:,ss),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+    
 %     errorbar(ts,mean(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),1),...
 %         std(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),[],1)/sqrt(length(to_plot_grouped_PSTH)),'color',colors(unique_stim_type(ss),:),'linew',2.5);
 end
+
 if length(unique_stim_type) == 3
     plot(ts,mean(sum(diff_PSTH_correct_mean_allheading(:,:,[1 2]),3),1),'k--');
 end
+
 plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
 
 axis tight;
@@ -1089,6 +1095,200 @@ if ION_cluster
 end
 
 end
+
+%% ===== Fig.5 Linear regression of Rcomb = Wvest * Rvest + Wvis * Rvis
+
+% ======  Part I: Small window steps =======
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+t_span = 0.2;    
+%         t_span = 1000;
+t_step = 0.05; % For time evolution
+toi = [0.95 1.3] ;   % Time of interests for weights illustration
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+to_plot_linear = 1:N_sample_cell;
+
+% PSTH_correct_mean_headings = [cell_for_regression time stim_type abs_heading choice];
+
+t_centers = ts(1) + t_span / 2 : t_step : ts(end)-t_span / 2;
+
+weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
+% measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
+
+for i = 1:length(to_plot_linear)  % For each cell
+
+    for tcc = 1:length(t_centers) % For each time bin
+
+        t_range = t_centers(tcc) - t_span / 2 <= ts & ts <= t_centers(tcc) + t_span / 2;
+
+        r = [];
+        for k = 1:3
+            r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
+        end
+
+        r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each 
+
+        % if tcc == 17    keyboard; end
+            
+        % GLM fit
+        [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
+        [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
+
+        weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
+
+        % yfit = r(:,1:2) * b;
+        % measure_pred_all((i-1)*10 + 1:(i-1)*10+size(r,1),:,tcc) = [r(:,3) yfit];
+
+        % r = r([end:-2:2 1:2:end-1],:);
+        % yfit = glmval(b,r(:,1:2),'identity');
+        % figure(348); hold on; plot(1:10,r(:,3),'o',1:10,yfit,'r-');
+
+    end
+end
+
+figure(7252243);
+set(gcf,'uni','norm','pos',[0.005       0.057       0.958       0.822]);clf; hold on;
+subplot(2,4,[1]);
+mean_paras = squeeze(mean(weight_vest_vis(:,[1 2 end-1],:),1))';
+sem_paras = squeeze(std(weight_vest_vis(:,[1 2 end-1],:)))'/sqrt(size(weight_vest_vis,1));
+
+temp_col = {'b','r','k'};
+temp_marker = {'s','o','o'}; % {'','',''};
+for pp = 1 : 3
+    h = shadedErrorBar(repmat(t_centers',1,1),mean_paras(:,pp),sem_paras(:,pp),{[temp_marker{pp} temp_col{pp} '-'],'linew',2,'markersize',10});
+    hold on;
+end
+axis tight;
+
+plot(repmat(t_centers',1,1),mean_paras(:,1)+mean_paras(:,2),'g','linew',2);
+plot(xlim,[1 1],'g:','linew',3);
+
+set(legend('w_{vest}','w_{vis}','R^2'),'location','best'); axis tight; %ylim([0 max(ylim)])
+xlabel(sprintf('Center of %g ms window',t_span)); ylabel('Median'); 
+
+% Gaussian vel
+plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+
+%% ======  Part I: Large window, R^2 and weight. Figure 5 of Gu 2008  =====
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+toi = [0.95 1.3] ;   % Time of interests for weights illustration
+t_span_large = 1;    
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+t_centers = toi;
+
+to_plot_linear = 1:N_sample_cell;
+% PSTH_correct_mean_headings = [cell_for_regression time stim_type abs_heading choice];
+
+weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
+measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
+
+for i = 1:length(to_plot_linear)  % For each cell
+
+    for tcc = 1:length(t_centers) % For each time bin
+
+        t_range = t_centers(tcc) - t_span_large / 2 <= ts & ts <= t_centers(tcc) + t_span_large / 2;
+
+        r = [];
+        for k = 1:3
+            r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
+        end
+
+        r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each 
+
+        % if tcc == 17    keyboard; end
+            
+        % GLM fit
+        [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
+        [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
+
+        weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
+
+        yfit = r(:,1:2) * b;
+        measure_pred_all((i-1)*10 + 1:(i-1)*10+size(r,1),:,tcc) = [r(:,3) yfit];
+
+        % r = r([end:-2:2 1:2:end-1],:);
+        % yfit = glmval(b,r(:,1:2),'identity');
+        % figure(348); hold on; plot(1:10,r(:,3),'o',1:10,yfit,'r-');
+
+    end
+end
+
+% --- Plotting ---
+for toii = 1:2
+    [~,toi_ind] = min(abs(toi(toii)-t_centers));
+
+    sig_ind = weight_vest_vis(:,end,toi_ind)<0.05;
+    nsig_ind = weight_vest_vis(:,end,toi_ind)>=0.05;
+
+    % Predicted v.s. measured
+    ax0 = subplot(2,4,2 + (toii-1)*4);
+    h = LinearCorrelation( measure_pred_all(:,1,toi_ind), measure_pred_all(:,2,toi_ind),...
+        'CombinedIndex',[],...
+        'Xlabel','Measured response','Ylabel','Predicted response',...
+        'FaceColors',{[0.9 0.9 0.9]},'Markers',{'.'},...
+        'LineStyles',{'k-'},'MarkerSize',10,...
+        'XHist',0,'YHist',0,...
+        'XHistStyle','grouped','YHistStyle','grouped','SameScale',1,'Method','Spearman','axes',ax0);
+    text(min(xlim)+2,min(ylim)+2,sprintf('r^2 = %g, p = %g',h.group(1).r_square,h.group(1).p),'FontSize',13);
+    legend off;
+
+    % Distribution of R^2
+    ax1 = subplot(2,4,3 + (toii-1)*4);
+    h = HistComparison({weight_vest_vis(sig_ind,end-1,toi_ind),weight_vest_vis(nsig_ind,end-1,toi_ind)},...
+        'EdgeColors',{'k','k'},'FaceColors',{[.3 .3 .3 ],[0.9 0.9 0.9]},'XCenters',0.05:0.1:1,'MeanType','Median','Axes',ax1);
+    xlabel('R^2'); ylabel('Number of neurons'); xlim([0 1]); ylim([0 23]);
+    title(sprintf('t_{center} = %g (%g s window)',t_centers(toi_ind),t_span_large));
+
+    % Vestibular / visual weights
+    ax2 = subplot(2,4,4 + (toii-1)*4);
+%    plot(weight_vest_vis(:,1,toi_ind),weight_vest_vis(:,2,toi_ind),'o');
+
+%     h = LinearCorrelation({
+%         weight_vest_vis(nsig_ind,1,toi_ind);
+%         weight_vest_vis(sig_ind,1,toi_ind);
+%         },...
+%         {
+%         weight_vest_vis(nsig_ind,2,toi_ind) ;
+%         weight_vest_vis(sig_ind,2,toi_ind) ;
+%         },...
+%         'CombinedIndex',[],...
+%         'Xlabel','Vestibular weight','Ylabel','Visual weight',...
+%         'FaceColors',{[0.9 0.9 0.9],[.3 .3 .3 ]},'Markers',{'o'},...
+%         'LineStyles',{'k--','k-'},'MarkerSize',9,...
+%         'XHist',20,'YHist',10,...
+%         'XHistStyle','stacked','YHistStyle','stacked','SameScale',1,'Method','Spearman','axes',ax2);
+    % text(min(xlim)+0.2,min(ylim)+0.2,sprintf('r^2 = %g, p = %g',h.group(2).r_square,h.group(2).p),'FontSize',13);
+    
+    % Fit color to to N_sample_cell/4
+    cols = colormap(jet);
+    cols = interp1(1:length(cols),cols,1:length(cols)/(N_sample_cell/4+4):length(cols));
+    for cc = 1:N_sample_cell
+        dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3));
+        this_col = cols(1+dis_prop,:);
+        plot(weight_vest_vis(cc,1,toi_ind),weight_vest_vis(cc,2,toi_ind),'o','markersize',7,'color',this_col,'linewid',2); hold on;
+    end
+    xlims = xlim; ylims = ylim;
+    xlims_new = [min(xlims(1),ylims(1)) max(xlims(2),ylims(2))];
+    xlims_new = [xlims_new(1)-range(xlims_new)/20 xlims_new(2)+range(xlims_new)/20];
+    
+    axis([xlims_new xlims_new]);
+    h.diag = plot([xlims_new(1) xlims_new(2)],[xlims_new(1) xlims_new(2)],'k:');
+    
+    if toii == 1 ; xlabel(''); end
+    plot(xlim,[0 0],'k--'); plot([0 0],ylim,'k--'); plot(xlim,[1 1],'k--'); plot([1 1],ylim,'k--');
+    legend off;
+    set(gca,'xtick',-10:1:10,'ytick',-10:1:10);
+
+end
+
+if ION_cluster
+    file_name = sprintf('./result/%s5_LinearRegression%s',save_folder,para_override_txt);
+    export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+    saveas(gcf,[file_name '.fig'],'fig');
+    % h_grouped = [h_grouped hs(1:6)']; % Add h_grouped
+end
+
 
 %%
 analysis_time = toc(analysis_time)

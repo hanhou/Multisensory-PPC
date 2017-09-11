@@ -295,24 +295,46 @@ end
 t_motion = 0:dt:trial_dur_total-stim_on_time; % in s
 miu = motion_duration/2 + delay_for_all; 
 sigma = motion_duration/2/num_of_sigma;
-vel = exp(-(t_motion-miu).^2/(2*sigma^2));
-vel = vel*amp/sum(vel*dt) ; % in m/s. Normalized to distance
-acc = diff(vel)/dt; % in m/s^2
 
-% Recalculate vel with visual delay
-vel = exp(-(t_motion-miu-delay_another_for_visual).^2/(2*sigma^2));
-vel = vel*amp/sum(vel*dt) ; % in m/s. Normalized to distance
+use_real_profile = 1;
+
+if use_real_profile
+    % -- Use the real velocity profile instead. HH20170808 --
+    load('Gaussian_vel_real_sigma3p5.mat');
+    real_t = Gaussian_vel_real_sigma3p5(:,1)/1000;
+    real_v = Gaussian_vel_real_sigma3p5(:,2);
+    real_v_interp = interp1(real_t,real_v,t_motion);
+    vel = real_v_interp;
+    
+    vel = vel*amp/sum(vel*dt) ; % in m/s. Normalized to distance
+    acc = diff(vel)/dt; % in m/s^2
+    
+    % Shift vel with visual delay
+    shift_bins = round(delay_another_for_visual/dt);
+    vel = [zeros(1,shift_bins) vel(1:end-shift_bins)];
+    
+else  % -- Use the ideal velocity profile ---
+    
+    vel = exp(-(t_motion-miu).^2/(2*sigma^2));
+    vel = vel*amp/sum(vel*dt) ; % in m/s. Normalized to distance
+    acc = diff(vel)/dt; % in m/s^2
+    
+    % Shift vel with visual delay
+    vel = exp(-(t_motion-miu-delay_another_for_visual).^2/(2*sigma^2)); % -- Use the ideal velocity profile ---
+    vel = vel*amp/sum(vel*dt) ; % in m/s. Normalized to distance
+end
 
 % To make sure t_motion, vel, and acc have the same length
 t_motion(end) = [];
 vel(end) = [];
 
+
 if if_debug
-    figure(111);clf
+    figure(111); clf
     set(gcf,'name','Motion profile','uni','norm','pos',[0.632       0.381       0.358       0.403]);
-    h = plotyy(t_motion,vel,t_motion,acc);
-    ylabel(h(1),'Velocity (m/s)');
-    ylabel(h(2),'Acceleration (m^2/s)');
+    h = plotyy(t_motion,acc,t_motion,vel);
+    ylabel(h(2),'Velocity (m/s)');
+    ylabel(h(1),'Acceleration (m^2/s)');
 end
 
 %%%%%%%%%%% Pack all paras %%%%%%%%%%%

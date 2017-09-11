@@ -128,7 +128,8 @@ corr_inds = [2.^((1:length(x))-1) paras.Results.CombinedIndex];
 
 xx_all = [];
 yy_all = [];
-non_empty = [];
+non_empty_dot = [];
+non_empty_line = [];
 
 for i = 1:length(corr_inds)
     
@@ -168,8 +169,12 @@ for i = 1:length(corr_inds)
         
         if strcmpi(paras.Results.Method,'Spearman') % Minimize perpendicular distance (PCA)
             coeff = pca([xx yy]);
-            linPara(1) = coeff(2) / coeff(1);
-            linPara(2) = mean(yy)- linPara(1) *mean(xx);
+            if ~isempty(coeff)
+                linPara(1) = coeff(2) / coeff(1);
+                linPara(2) = mean(yy)- linPara(1) *mean(xx);
+            else
+                linPara = [nan nan];
+            end
             
             % -- Plotting
             xxx = linspace(min(xx),max(xx),150);
@@ -197,7 +202,7 @@ for i = 1:length(corr_inds)
             hold on;
             
             dot_leg{i} = num2str(i);
-            non_empty = [non_empty i];        
+            non_empty_dot = [non_empty_dot i];        
             
             % Cache raw data for histogram later
             xx_for_hist{i} = xx;
@@ -206,19 +211,20 @@ for i = 1:length(corr_inds)
             yy_all = [yy_all; yy];
         end
         
+        % -- Saving
+        
+        h.group(i).line = plot(xxx,Y,paras.Results.LineStyles{1+mod(i-1,length(paras.Results.LineStyles))},'linewidth',2);
+        non_empty_line = [non_empty_line i];
+        
+        %     h.group(i).text = text(xxx(end),Y(end),sprintf('\\itr\\rm = %3.3f, \\itp\\rm = %3.3f',r,p),'color',paras.Results.LineStyles{i}(1));
+        line_leg{i} = ['[' num2str(combs) '] ' sprintf('\\itr^2\\rm = %3.3g, \\itp\\rm = %3.3g, \\itk\\rm = %3.3g',r^2,p,linPara(1))];
+        
+        h.group(i).r_square = r^2;
+        h.group(i).p = p;
+        h.group(i).para = linPara;
+        h.group(i).S = S;
     end
-    % -- Saving
 
-    h.group(i).line = plot(xxx,Y,paras.Results.LineStyles{1+mod(i-1,length(paras.Results.LineStyles))},'linewidth',2);
-    
-%     h.group(i).text = text(xxx(end),Y(end),sprintf('\\itr\\rm = %3.3f, \\itp\\rm = %3.3f',r,p),'color',paras.Results.LineStyles{i}(1));
-    line_leg{i} = ['[' num2str(combs) '] ' sprintf('\\itr^2\\rm = %3.3g, \\itp\\rm = %3.3g, \\itk\\rm = %3.3g',r^2,p,linPara(1))];
-    
-    h.group(i).r_square = r^2;
-    h.group(i).p = p;
-    h.group(i).para = linPara;
-    h.group(i).S = S;
-    
 end
 
 axes(h.ax_raw);
@@ -252,7 +258,8 @@ xlims = xlim;
 ylims = ylim;
 
 try
-    leg = legend([h.group.dots h.group.line],{dot_leg{non_empty} line_leg{:}}); % ,'Location', 'EastOutside');
+    leg = legend([h.group(non_empty_dot).dots h.group(non_empty_line).line],...
+        {dot_leg{non_empty_dot} line_leg{non_empty_line}}); % ,'Location', 'EastOutside');
 catch
     keyboard
 end
