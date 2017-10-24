@@ -1,3 +1,14 @@
+%% Analysis switch
+analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 
+                   0;  % 0p5 Decoding method 
+                       % 1 Overview (mandatary)
+                   0;  % 1p5 Overview (normalized)
+                   1;  % 2 Example
+                   1;  % 3 Cells deltaPSTH
+                   1;  % 3p5 Cells rawPSTH
+                   0;  % 4 Heterogeneity
+                   0;  % 5 Linear regression (Gu 2008)
+                   ];
 
 %% Get data
 % if ~exist('RT','var')  % Used in offline analysis
@@ -135,28 +146,30 @@ if if_debug
     end
 else % Not debug, Fig.2a in Beck 2008
   %% Averaged population activity for the to_plot_cond condition
-%   %{
-    rate_expected_lip_aver = nanmean(rate_lip(:,:,:,this_heading_ind,to_plot_cond),3);
-    figure(1647);  set(gcf,'uni','norm','pos',[0.252       0.431       0.669       0.435]);    clf; 
-    
-    subplot(1,2,1);
-    to_snap_time = [0.25 0.5 0.75 1.0 1.25];
-    snapshots =  arrayfun(@(x)find(ts>x,1),to_snap_time);
-    set(0,'defaultaxescolororder',lines)
-    plot(prefs_lip,rate_expected_lip_aver(:,snapshots),'o');
-    set(gca,'xtick',[-180:90:180]);
-    title('PSTH');
-    legend(num2str(to_snap_time'));
-    
-    subplot(1,2,2);
-    plot(prefs_lip(1:end/2),rate_expected_lip_aver(end/2+1:end,snapshots)-fliplr(rate_expected_lip_aver(1:end/2,snapshots)),'o');
-    title('Diff PSTH');
-    set(gca,'xtick',-180:90:180);
-    
-    if ION_cluster
-        export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s0p1_Fig2a%s.png',save_folder,para_override_txt));
-        saveas(gcf,sprintf('./result/%s0p1_Fig2a%s.fig',save_folder,para_override_txt),'fig');
-    end
+  %   %{
+  if analysis_switch(1)
+      rate_expected_lip_aver = nanmean(rate_lip(:,:,:,this_heading_ind,to_plot_cond),3);
+      figure(1647);  set(gcf,'uni','norm','pos',[0.252       0.431       0.669       0.435]);    clf;
+      
+      subplot(1,2,1);
+      to_snap_time = [0.25 0.5 0.75 1.0 1.25];
+      snapshots =  arrayfun(@(x)find(ts>x,1),to_snap_time);
+      set(0,'defaultaxescolororder',lines)
+      plot(prefs_lip,rate_expected_lip_aver(:,snapshots),'o');
+      set(gca,'xtick',[-180:90:180]);
+      title('PSTH');
+      legend(num2str(to_snap_time'));
+      
+      subplot(1,2,2);
+      plot(prefs_lip(1:end/2),rate_expected_lip_aver(end/2+1:end,snapshots)-fliplr(rate_expected_lip_aver(1:end/2,snapshots)),'o');
+      title('Diff PSTH');
+      set(gca,'xtick',-180:90:180);
+      
+      if ION_cluster
+          export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s0p1_Fig2a%s.png',save_folder,para_override_txt));
+          saveas(gcf,sprintf('./result/%s0p1_Fig2a%s.fig',save_folder,para_override_txt),'fig');
+      end
+  end
   %}
 end
 
@@ -186,8 +199,21 @@ end
 
 %% ====== Readout LIP activity and make decisions =====
 disp('Decoding...');
+
+if read_out_at_the_RT == 1 % Freeze population activity at RT for each trial
+    rate_lip_at_decision = nan(N_lip,N_rep,length(unique_heading),length(unique_stim_type));
+    for aa = 1:N_rep
+        for bb = 1:length(unique_heading)
+            for cc = 1:length(unique_stim_type)
+                rate_lip_at_decision(:,aa,bb,cc) = rate_lip(:,round(RT(aa,bb,cc)/dt)+stim_on_time_in_bins,aa,bb,cc);
+            end
+        end
+    end
+else
+    rate_lip_at_decision = squeeze(rate_lip(:,end,:,:,:)); % Or, get the population activity at the end of the trials
+end
+
 % -------- Simple readout: Location of max rate -------------
-rate_lip_at_decision = squeeze(rate_lip(:,end,:,:,:)); % Get the population activity at the end of the trials
 [~, readout_lip_at_decision] = max(rate_lip_at_decision,[],1); % Readout population activity    
 choices_maxpos = sign((prefs_lip(shiftdim(readout_lip_at_decision)) >= 0) -0.5); % choices(reps,headings,stimtypes):  1 = rightward, -1 = leftward
 correct_rate_maxpos = sum(choices_maxpos(:) == correct_ans_all(:)) / numel(correct_ans_all);
@@ -328,86 +354,87 @@ choices_svm_toy_train = reshape(choices_svm_toy_train_Cs{bestToyC},n_train_each_
 %% ====== Fig.0.5 Compare MaxPos and SVM (training, test) ======
 % %{
 % Compare different decoding methods (MaxPos, SVM_all, SVM_test)
-figure(2135); clf;
-set(gcf,'name','Decoding methods');
-set(gcf,'uni','norm','pos',[0.013        0.06       0.972       0.464]);
-
-decoding_methods = {choices_maxpos, 'MaxPos';
-                    choices_svm_all, 'SVM all';
-                    choices_svm_train, 'SVM train';
-                    choices_svm_test, 'SVM test';
-                    choices_svm_toy_train, 'SVM toy train'};
-hs = tight_subplot(2,size(decoding_methods,1),0.05,0.1);
-
-% ======= Behavior ========
-
-% --- Bootstrapping ---
-if ION_cluster
-    N_bootstrapping = 200;
-    N_reps_boot = N_rep;
-else
-    N_bootstrapping = 20;
-    N_reps_boot = 20; 
-end
-
-for dm = 1:size(decoding_methods,1)
-    thres_boot = nan(length(unique_stim_type),N_bootstrapping);
+if analysis_switch(2)
+    figure(2135); clf;
+    set(gcf,'name','Decoding methods');
+    set(gcf,'uni','norm','pos',[0.013        0.06       0.972       0.464]);
     
-    for ss = 1:length(unique_stim_type)
+    decoding_methods = {choices_maxpos, 'MaxPos';
+        choices_svm_all, 'SVM all';
+        choices_svm_train, 'SVM train';
+        choices_svm_test, 'SVM test';
+        choices_svm_toy_train, 'SVM toy train'};
+    hs = tight_subplot(2,size(decoding_methods,1),0.05,0.1);
+    
+    % ======= Behavior ========
+    
+    % --- Bootstrapping ---
+    if ION_cluster
+        N_bootstrapping = 200;
+        N_reps_boot = N_rep;
+    else
+        N_bootstrapping = 20;
+        N_reps_boot = 20;
+    end
+    
+    for dm = 1:size(decoding_methods,1)
+        thres_boot = nan(length(unique_stim_type),N_bootstrapping);
         
-        psychometric = [unique_heading' sum(reshape(decoding_methods{dm,1}(:,:,ss)==RIGHT,[],length(unique_heading)),1)'/size(decoding_methods{dm,1},1)];
-        
-        axes(hs(dm*2-1)); set(gca,'color','none');
-        
-        parfor bb = 1:N_bootstrapping
-            psycho_boot = sum(bsxfun(@le,rand(size(psychometric,1),N_reps_boot),psychometric(:,2)),2)/N_reps_boot;
-            [~, thres_boot_this] = cum_gaussfit_max1([unique_heading' psycho_boot]);
-            thres_boot(ss,bb) = thres_boot_this;
+        for ss = 1:length(unique_stim_type)
+            
+            psychometric = [unique_heading' sum(reshape(decoding_methods{dm,1}(:,:,ss)==RIGHT,[],length(unique_heading)),1)'/size(decoding_methods{dm,1},1)];
+            
+            axes(hs(dm*2-1)); set(gca,'color','none');
+            
+            parfor bb = 1:N_bootstrapping
+                psycho_boot = sum(bsxfun(@le,rand(size(psychometric,1),N_reps_boot),psychometric(:,2)),2)/N_reps_boot;
+                [~, thres_boot_this] = cum_gaussfit_max1([unique_heading' psycho_boot]);
+                thres_boot(ss,bb) = thres_boot_this;
+            end
+            
+            set(bar(ss,mean(thres_boot(ss,:))),'facecolor',colors(unique_stim_type(ss),:)); hold on;
+            errorbar(ss,mean(thres_boot(ss,:)),std(thres_boot(ss,:)),'color',colors(unique_stim_type(ss),:));
+            
+            axes(hs(dm*2));
+            
+            plot(psychometric(:,1),psychometric(:,2),'o','color',colors(unique_stim_type(ss),:),'markerfacecolor',colors(unique_stim_type(ss),:),'markersize',10); % Psychometric
+            hold on;
+            xxx = -max(unique_heading):0.1:max(unique_heading);
+            
+            [bias, threshold] = cum_gaussfit_max1(psychometric);
+            psycho(ss,:) = [bias,threshold];
+            
+            set(text(min(xlim),0.6+0.06*ss,sprintf('%g\n',threshold)),'color',colors(unique_stim_type(ss),:));
+            
+            plot(xxx,normcdf(xxx,bias,threshold),'-','color',colors(unique_stim_type(ss),:),'linewid',4);
+            axis([-8.5 8.5 0 1]);
+            
         end
         
-        set(bar(ss,mean(thres_boot(ss,:))),'facecolor',colors(unique_stim_type(ss),:)); hold on;
-        errorbar(ss,mean(thres_boot(ss,:)),std(thres_boot(ss,:)),'color',colors(unique_stim_type(ss),:));
+        axes(hs(dm*2-1));
+        thres_boot(4,:) = (thres_boot(1,:).^(-2) + thres_boot(2,:).^(-2)).^(-1/2);
+        set(bar(4,mean(thres_boot(4,:))),'facecolor','k'); hold on;
+        errorbar(4,mean(thres_boot(4,:)),std(thres_boot(4,:)),'k');
         
+        title(sprintf('%s, N_{reps} = %g',decoding_methods{dm,2},size(decoding_methods{dm,1},1)));
+        
+        % Pred
         axes(hs(dm*2));
-        
-        plot(psychometric(:,1),psychometric(:,2),'o','color',colors(unique_stim_type(ss),:),'markerfacecolor',colors(unique_stim_type(ss),:),'markersize',10); % Psychometric
-        hold on;
-        xxx = -max(unique_heading):0.1:max(unique_heading);
-        
-        [bias, threshold] = cum_gaussfit_max1(psychometric);
-        psycho(ss,:) = [bias,threshold];
-        
-        set(text(min(xlim),0.6+0.06*ss,sprintf('%g\n',threshold)),'color',colors(unique_stim_type(ss),:));
-        
-        plot(xxx,normcdf(xxx,bias,threshold),'-','color',colors(unique_stim_type(ss),:),'linewid',4);
-        axis([-8.5 8.5 0 1]);
+        if length(unique_stim_type) == 3
+            pred_thres = (psycho(1,2)^(-2)+psycho(2,2)^(-2))^(-1/2);
+            set(text(min(xlim),0.6+0.06*(ss+1),sprintf('pred = %g\n',pred_thres)),'color','k');
+        end
         
     end
-        
-    axes(hs(dm*2-1));
-    thres_boot(4,:) = (thres_boot(1,:).^(-2) + thres_boot(2,:).^(-2)).^(-1/2);
-    set(bar(4,mean(thres_boot(4,:))),'facecolor','k'); hold on;
-    errorbar(4,mean(thres_boot(4,:)),std(thres_boot(4,:)),'k');
-
-    title(sprintf('%s, N_{reps} = %g',decoding_methods{dm,2},size(decoding_methods{dm,1},1)));
     
-    % Pred
-    axes(hs(dm*2));
-    if length(unique_stim_type) == 3
-        pred_thres = (psycho(1,2)^(-2)+psycho(2,2)^(-2))^(-1/2);
-        set(text(min(xlim),0.6+0.06*(ss+1),sprintf('pred = %g\n',pred_thres)),'color','k');
+    if ION_cluster
+        file_name = sprintf('./result/%s0p5_DecodingMethods%s',save_folder,para_override_txt);
+        export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+        saveas(gcf,[file_name '.fig'],'fig');
     end
     
+    disp('Decoding done!');
 end
-
-if ION_cluster
-    file_name = sprintf('./result/%s0p5_DecodingMethods%s',save_folder,para_override_txt);
-    export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
-    saveas(gcf,[file_name '.fig'],'fig');
-end
-
-disp('Decoding done!');
-
 %}
 
 %% ====== Fig.1 Overview ======
@@ -500,7 +527,7 @@ thres_boot(4,:) = (thres_boot(1,:).^(-2) + thres_boot(2,:).^(-2)).^(-1/2);
 set(bar(4,mean(thres_boot(4,:))),'facecolor','k'); hold on;
 errorbar(4,mean(thres_boot(4,:)),std(thres_boot(4,:)),'k');
 
-title(sprintf('N_{reps} = %g',N_rep));
+title(sprintf('N_{reps} = %g, Readout at RT = %g',N_rep,read_out_at_the_RT));
 
 % Pred
 axes(hpsy);
@@ -696,599 +723,607 @@ xlim([min(ts),max(ts)]);
 if ION_cluster
     export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1_Overview%s.png',save_folder,para_override_txt));
     saveas(gcf,sprintf('./result/%s1_Overview%s.fig',save_folder,para_override_txt),'fig');
-    h_grouped = [h_grouped hs(1) hpsy hs(6)]; % Add h_grouped
+    h_grouped = [h_grouped hs(1) hpsy hs(6) hs(12)]; % Add h_grouped
 end
 disp('Overview done');
 
 %% ====== Fig.1.5 Overview_normalized ======
-figure(7141706); clf;
-set(gcf,'name','Overview_normalized');
-set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
-
-hs = tight_subplot(3,4,0.05);
-
-% -- Plotting PSTH / norm PSTH, all in one --
-yyy = reshape(PSTH_correct_mean_allheading,N_sample_cell,length(ts),[]);
-h = SeriesComparison(yyy,ts,...
-    'Colors',colors,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
-    'ErrorBar',2,'Xlabel',[],'axes',hs(1));
-legend off;
-plot(hs(1),t_motion,vel/max(vel)*max(ylim)/5,'k--'); axis tight;
-title(hs(1),'raw');
-
-yyy = reshape(PSTH_correct_mean_allheading_norm,N_sample_cell,length(ts),[]);
-h = SeriesComparison(yyy,ts,...
-    'Colors',colors,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
-    'ErrorBar',2,'Xlabel',[],'axes',hs(2));
-legend off;
-plot(hs(2),t_motion,vel/max(vel)*max(ylim)/5,'k--'); axis tight;
-title(hs(2),'norm');
-
-% -- Plotting norm PSTHs, grouped by stim type, different angles --
-y_max = -inf; y_min = inf;
-colors_hue = [240 0 120]/360;
-
-for ss = 1:length(unique_stim_type)
-    yyy = squeeze(reshape(mean(PSTH_correct_mean_headings_norm(:,:,ss,:,:),1),1,[],1,length(unique_abs_heading)*2));
-    yyy = shiftdim(yyy,-1);
+if analysis_switch(3)
+    figure(7141706); clf;
+    set(gcf,'name','Overview_normalized');
+    set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
     
-    colors_angles_hsv(:,2) = linspace(0.2,1,length(unique_abs_heading));
-    colors_angles_hsv(:,1) = colors_hue(ss);
-    colors_angles_hsv(:,3) = 0.9;
-    colors_angles = hsv2rgb(colors_angles_hsv);
-    colors_angles = mat2cell(colors_angles,ones(length(unique_abs_heading),1));
+    hs = tight_subplot(3,4,0.05);
     
+    % -- Plotting PSTH / norm PSTH, all in one --
+    yyy = reshape(PSTH_correct_mean_allheading,N_sample_cell,length(ts),[]);
     h = SeriesComparison(yyy,ts,...
-        'Colors',colors_angles,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
-        'ErrorBar',0,'Xlabel',[],'axes',hs(3+ss));
+        'Colors',colors,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
+        'ErrorBar',2,'Xlabel',[],'axes',hs(1));
     legend off;
-    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
-
-    axis tight;
-    y_min = min(y_min,min(ylim));
-    y_max = max(y_max,max(ylim));
-    xlim([min(ts),max(ts)]);
-end
-
-% title(hs(4),sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(to_plot_grouped_PSTH))));
-title(hs(4),sprintf('Grouped %g cells',N_sample_cell));
-
-set(hs(4:6),'ylim',[y_min y_max]);
-
-% =====  Delta-PSTH (stim type), different heading, correct only ====
-y_max = -inf; y_min = inf;
-
-for abshh = 1:length(unique_abs_heading)
+    plot(hs(1),t_motion,vel/max(vel)*max(ylim)/5,'k--'); axis tight;
+    title(hs(1),'raw');
     
-    axes(hs(6+abshh)); hold on;
+    yyy = reshape(PSTH_correct_mean_allheading_norm,N_sample_cell,length(ts),[]);
+    h = SeriesComparison(yyy,ts,...
+        'Colors',colors,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
+        'ErrorBar',2,'Xlabel',[],'axes',hs(2));
+    legend off;
+    plot(hs(2),t_motion,vel/max(vel)*max(ylim)/5,'k--'); axis tight;
+    title(hs(2),'norm');
+    
+    % -- Plotting norm PSTHs, grouped by stim type, different angles --
+    y_max = -inf; y_min = inf;
+    colors_hue = [240 0 120]/360;
     
     for ss = 1:length(unique_stim_type)
-        plot(ts,mean(diff_PSTH_correct_mean_headings_norm(:,:,ss,abshh),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+        yyy = squeeze(reshape(mean(PSTH_correct_mean_headings_norm(:,:,ss,:,:),1),1,[],1,length(unique_abs_heading)*2));
+        yyy = shiftdim(yyy,-1);
+        
+        colors_angles_hsv(:,2) = linspace(0.2,1,length(unique_abs_heading));
+        colors_angles_hsv(:,1) = colors_hue(ss);
+        colors_angles_hsv(:,3) = 0.9;
+        colors_angles = hsv2rgb(colors_angles_hsv);
+        colors_angles = mat2cell(colors_angles,ones(length(unique_abs_heading),1));
+        
+        h = SeriesComparison(yyy,ts,...
+            'Colors',colors_angles,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
+            'ErrorBar',0,'Xlabel',[],'axes',hs(3+ss));
+        legend off;
+        plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+        
+        axis tight;
+        y_min = min(y_min,min(ylim));
+        y_max = max(y_max,max(ylim));
+        xlim([min(ts),max(ts)]);
+    end
+    
+    % title(hs(4),sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(to_plot_grouped_PSTH))));
+    title(hs(4),sprintf('Grouped %g cells',N_sample_cell));
+    
+    set(hs(4:6),'ylim',[y_min y_max]);
+    
+    % =====  Delta-PSTH (stim type), different heading, correct only ====
+    y_max = -inf; y_min = inf;
+    
+    for abshh = 1:length(unique_abs_heading)
+        
+        axes(hs(6+abshh)); hold on;
+        
+        for ss = 1:length(unique_stim_type)
+            plot(ts,mean(diff_PSTH_correct_mean_headings_norm(:,:,ss,abshh),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+        end
+        if length(unique_stim_type) == 3
+            plot(ts,mean(sum(diff_PSTH_correct_mean_headings_norm(:,:,[1 2],abshh),3),1),'k--');
+        end
+        title(sprintf('|heading| = %g',unique_abs_heading(abshh)));
+        
+        plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+        axis tight;
+        y_min = min(y_min,min(ylim));
+        y_max = max(y_max,max(ylim));
+    end
+    
+    % ======= Delta-PSTH, all heading, correct only =====
+    axes(hs(12)); hold on;    title('All headings');
+    
+    for ss = 1:length(unique_stim_type)
+        plot(ts,mean(diff_PSTH_correct_mean_allheading_norm(:,:,ss),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+        %     errorbar(ts,mean(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),1),...
+        %         std(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),[],1)/sqrt(length(to_plot_grouped_PSTH)),'color',colors(unique_stim_type(ss),:),'linew',2.5);
     end
     if length(unique_stim_type) == 3
-        plot(ts,mean(sum(diff_PSTH_correct_mean_headings_norm(:,:,[1 2],abshh),3),1),'k--');
+        plot(ts,mean(sum(diff_PSTH_correct_mean_allheading_norm(:,:,[1 2]),3),1),'k--');
     end
-    title(sprintf('|heading| = %g',unique_abs_heading(abshh)));
-    
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+    
     axis tight;
     y_min = min(y_min,min(ylim));
     y_max = max(y_max,max(ylim));
+    
+    set(hs(7:12),'ylim',[y_min y_max]);
+    
+    
+    if ION_cluster
+        export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1p5_Overview_norm%s.png',save_folder,para_override_txt));
+        saveas(gcf,sprintf('./result/%s1p5_Overview_norm%s.fig',save_folder,para_override_txt),'fig');
+        h_grouped = [h_grouped hs(1) hpsy hs(6)]; % Add h_grouped
+    end
+    disp('Overview done');
 end
-
-% ======= Delta-PSTH, all heading, correct only =====
-axes(hs(12)); hold on;    title('All headings');
-
-for ss = 1:length(unique_stim_type)
-    plot(ts,mean(diff_PSTH_correct_mean_allheading_norm(:,:,ss),1),'color',colors(unique_stim_type(ss),:),'linew',2.5);
-%     errorbar(ts,mean(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),1),...
-%         std(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),[],1)/sqrt(length(to_plot_grouped_PSTH)),'color',colors(unique_stim_type(ss),:),'linew',2.5);
-end
-if length(unique_stim_type) == 3
-    plot(ts,mean(sum(diff_PSTH_correct_mean_allheading_norm(:,:,[1 2]),3),1),'k--');
-end
-plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
-
-axis tight;
-y_min = min(y_min,min(ylim));
-y_max = max(y_max,max(ylim));
-
-set(hs(7:12),'ylim',[y_min y_max]);
-
-
-if ION_cluster
-    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1p5_Overview_norm%s.png',save_folder,para_override_txt));
-    saveas(gcf,sprintf('./result/%s1p5_Overview_norm%s.fig',save_folder,para_override_txt),'fig');
-    h_grouped = [h_grouped hs(1) hpsy hs(6)]; % Add h_grouped
-end
-disp('Overview done');
 
 %% ====== Fig.2 Example Pref and Null traces (correct only) ======
 %%{
-
-to_plot_abs_headings = [0 4 8];
-% to_plot_cell_ind = right_targ_ind;  % Cell-based plotting
-[~, ind] = max(mean(mean(diff_PSTH_correct_mean_allheading(:,:,:),2),3),[],1);
-to_plot_cell_ind = to_calculate_PSTH_cells_ind(ind);
-n_to_plot_trace = 5;
-
-set(figure(1001),'name','Example PSTHs (correct only)'); clf;
-set(gcf,'uni','norm','pos',[0.005       0.056       0.33*length(to_plot_abs_headings)       0.832]);
-hs = tight_subplot(3,2*length(to_plot_abs_headings),[0.04 0.03]);
-
-pref_null = [RIGHT LEFT]; % Default: PREF = RIGHT, NULL = LEFT
-if prefs_lip(to_plot_cell_ind)<0  % If this target cell has a negative pref heading
-    pref_null = fliplr(pref_null);
-end
-
-y_max = -inf; y_min = inf; to_sync = [];
-
-for tph = 1:length(to_plot_abs_headings)
-
-    for ss = 1:length(unique_stim_type)
+if analysis_switch(4)
+    to_plot_abs_headings = [0 4 8];
+    % to_plot_cell_ind = right_targ_ind;  % Cell-based plotting
+    [~, ind] = max(mean(mean(diff_PSTH_correct_mean_allheading(:,:,:),2),3),[],1);
+    to_plot_cell_ind = to_calculate_PSTH_cells_ind(ind);
+    n_to_plot_trace = 5;
     
-        for cc = 1:2 % Pref and Null
+    set(figure(1001),'name','Example PSTHs (correct only)'); clf;
+    set(gcf,'uni','norm','pos',[0.005       0.056       0.33*length(to_plot_abs_headings)       0.832]);
+    hs = tight_subplot(3,2*length(to_plot_abs_headings),[0.04 0.03]);
+    
+    pref_null = [RIGHT LEFT]; % Default: PREF = RIGHT, NULL = LEFT
+    if prefs_lip(to_plot_cell_ind)<0  % If this target cell has a negative pref heading
+        pref_null = fliplr(pref_null);
+    end
+    
+    y_max = -inf; y_min = inf; to_sync = [];
+    
+    for tph = 1:length(to_plot_abs_headings)
+        
+        for ss = 1:length(unique_stim_type)
             
-            this_heading_ind = find(unique_heading == to_plot_abs_headings(tph) * pref_null(cc),1);
-            this_correct_ind = find(choices(:,this_heading_ind,ss) == pref_null(cc)); % Only correct trials
-            
-            for tt = 1:ceil(length(this_correct_ind)/n_to_plot_trace):length(this_correct_ind)
+            for cc = 1:2 % Pref and Null
                 
-                RT_this = RT(this_correct_ind(tt),this_heading_ind,ss);
-                rate_at_RT = rate_lip(to_plot_cell_ind,find(ts<=RT_this,1,'last'),this_correct_ind(tt),this_heading_ind,ss);
+                this_heading_ind = find(unique_heading == to_plot_abs_headings(tph) * pref_null(cc),1);
+                this_correct_ind = find(choices(:,this_heading_ind,ss) == pref_null(cc)); % Only correct trials
                 
-                % --- LIP ---
-                axes(hs(6*(tph-1)+ss));
-                
-                if cc == 1 % Pref
-                    plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
-                    plot([RT_this RT_this],[rate_at_RT+5 rate_at_RT-5],'m','linew',5);
-                else
-                    plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1);
-                    plot([RT_this RT_this],[rate_at_RT+5 rate_at_RT-5],'k','linew',5);
+                for tt = 1:ceil(length(this_correct_ind)/n_to_plot_trace):length(this_correct_ind)
+                    
+                    RT_this = RT(this_correct_ind(tt),this_heading_ind,ss);
+                    rate_at_RT = rate_lip(to_plot_cell_ind,find(ts<=RT_this,1,'last'),this_correct_ind(tt),this_heading_ind,ss);
+                    
+                    % --- LIP ---
+                    axes(hs(6*(tph-1)+ss));
+                    
+                    if cc == 1 % Pref
+                        plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
+                        plot([RT_this RT_this],[rate_at_RT+5 rate_at_RT-5],'m','linew',5);
+                    else
+                        plot(ts,rate_lip(to_plot_cell_ind,:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1);
+                        plot([RT_this RT_this],[rate_at_RT+5 rate_at_RT-5],'k','linew',5);
+                    end
+                    
+                    axis tight; y_min = min(y_min,min(ylim)); y_max = max(y_max,max(ylim)); to_sync = [to_sync gca];
+                    
+                    % --- Int ---
+                    axes(hs(6*(tph-1)+ss+3));
+                    if cc == 1 % Pref
+                        plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
+                    else
+                        plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1); hold on;
+                    end
+                    %     if if_bounded
+                    %         plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
+                    % %         ylim([min(ylim),decis_thres*1.1]);
+                    %     end
+                    
                 end
-                
-                axis tight; y_min = min(y_min,min(ylim)); y_max = max(y_max,max(ylim)); to_sync = [to_sync gca];
-                
-                % --- Int ---
-                axes(hs(6*(tph-1)+ss+3));
-                if cc == 1 % Pref
-                    plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'color',colors(unique_stim_type(ss),:),'linewid',2); hold on;
-                else
-                    plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1); hold on;
-                end
-                %     if if_bounded
-                %         plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
-                % %         ylim([min(ylim),decis_thres*1.1]);
-                %     end
-                
             end
+            
+            axes(hs(6*(tph-1)+ss));
+            title(sprintf('rate\\_lip, pref = %g, |heading| = %g',prefs_lip(to_plot_cell_ind), to_plot_abs_headings(tph)));
+            plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
+            axis tight;
+            if if_bounded
+                plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
+                %         ylim([min(ylim),decis_thres(k)*1.1]);
+            end
+            
+            axes(hs(6*(tph-1)+ss+3));
+            title(sprintf('rate\\_int'));
+            plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
+            axis tight;
+            
         end
-        
-        axes(hs(6*(tph-1)+ss));
-        title(sprintf('rate\\_lip, pref = %g, |heading| = %g',prefs_lip(to_plot_cell_ind), to_plot_abs_headings(tph)));
-        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
-        axis tight;
-        if if_bounded
-            plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
-            %         ylim([min(ylim),decis_thres(k)*1.1]);
-        end
-        
-        axes(hs(6*(tph-1)+ss+3));
-        title(sprintf('rate\\_int'));
-        plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
-        axis tight;
         
     end
     
+    set(to_sync,'ylim',[y_min y_max]);
+    
+    if ION_cluster
+        export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s2_Example%s.png',save_folder,para_override_txt));
+        saveas(gcf,sprintf('./result/%s2_Example%s.fig',save_folder,para_override_txt),'fig');
+    end
+    
+    disp('Example done');
 end
-
-set(to_sync,'ylim',[y_min y_max]);
-
-if ION_cluster
-    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s2_Example%s.png',save_folder,para_override_txt));
-    saveas(gcf,sprintf('./result/%s2_Example%s.fig',save_folder,para_override_txt),'fig');
-end
-
-disp('Example done');
-
 %}
 
 %% ====== Fig.3 Different cells, delta PSTH ======
-
-figure(1002); clf;
-set(gcf,'name','Different cells, delta PSTH');
-set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
-
-% -- diff_PSTH for all headings --
-% Only plot diff_PSTH and raw PSTH for part of cells (Max number = 30)
-to_plot_single_cell_PSTH = unique(round(1:N_sample_cell/30:N_sample_cell)); 
-
-m = fix(sqrt(length(to_plot_single_cell_PSTH)+5));
-n = ceil((length(to_plot_single_cell_PSTH)+5)/m);
-[~,hs] = tight_subplot(m,n,0.05);
-y_max = -inf; y_min = inf;
-
-for cc = 1:length(to_plot_single_cell_PSTH)
-    axes(hs(cc)); hold on;
-    for ss = 1:length(unique_stim_type)
-        plot(ts,diff_PSTH_correct_mean_allheading(to_plot_single_cell_PSTH(cc),:,ss),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+if analysis_switch(5)
+    figure(1002); clf;
+    set(gcf,'name','Different cells, delta PSTH');
+    set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
+    
+    % -- diff_PSTH for all headings --
+    % Only plot diff_PSTH and raw PSTH for part of cells (Max number = 30)
+    to_plot_single_cell_PSTH = unique(round(1:N_sample_cell/30:N_sample_cell));
+    
+    m = fix(sqrt(length(to_plot_single_cell_PSTH)+5));
+    n = ceil((length(to_plot_single_cell_PSTH)+5)/m);
+    [~,hs] = tight_subplot(m,n,0.05);
+    y_max = -inf; y_min = inf;
+    
+    for cc = 1:length(to_plot_single_cell_PSTH)
+        axes(hs(cc)); hold on;
+        for ss = 1:length(unique_stim_type)
+            plot(ts,diff_PSTH_correct_mean_allheading(to_plot_single_cell_PSTH(cc),:,ss),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+        end
+        if length(unique_stim_type) == 3
+            plot(ts,sum(diff_PSTH_correct_mean_allheading(to_plot_single_cell_PSTH(cc),:,[1 2]),3),'k--');
+        end
+        plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+        
+        
+        title(sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc)))));
+        
+        if abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc))-left_targ_ind) == min(abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH)-left_targ_ind)) ...
+                || abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc)) - right_targ_ind) == min(abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH) - right_targ_ind))
+            set(gca,'color','y');
+        end
+        
+        axis tight;
+        y_min = min(y_min,min(ylim));
+        y_max = max(y_max,max(ylim));
     end
-    if length(unique_stim_type) == 3
-        plot(ts,sum(diff_PSTH_correct_mean_allheading(to_plot_single_cell_PSTH(cc),:,[1 2]),3),'k--');
+    
+    set(hs,'ylim',[y_min y_max]);
+    
+    % -- Weights --
+    axes(hs(end-4));
+    h1 = imagesc(prefs_lip,prefs_lip,w_lip_lip'); axis  xy; title('LIP->LIP');
+    xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
+    set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
+    % set(h1,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_lip,w_lip_lip'});
+    
+    axes(hs(end-3));
+    h2 = imagesc(prefs_int,prefs_lip,w_lip_int');  axis xy; title('Int->LIP');
+    xlabel('\theta_{lip}'); ylabel('\theta_{int}');
+    set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
+    % set(h2,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_int,w_lip_int'});
+    
+    axes(hs(end-2));
+    h3 = imagesc(prefs_vis,prefs_int,w_int_vis'); axis xy; title('Vis->Int');
+    xlabel('\theta_{int}'); ylim([-30 30]);    ylabel('\theta_{vis}');
+    set(gca,'xtick',-180:90:180);
+    % set(h3,'ButtonDownFcn',{@plot_weight,prefs_int,prefs_vis,w_int_vis'});
+    
+    axes(hs(end-1));
+    h3 = imagesc(prefs_vest,prefs_int,w_int_vest'); axis xy; title('Vest->Int');
+    xlabel('\theta_{int}'); ylim([-30 30]);    ylabel('\theta_{vest}');
+    set(gca,'xtick',-180:90:180);
+    % set(h3,'ButtonDownFcn',{@plot_weight,prefs_int,prefs_vis,w_int_vis'});
+    
+    colormap hot;
+    
+    if ION_cluster
+        export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s3_Cells%s.png',save_folder,para_override_txt));
+        saveas(gcf,sprintf('./result/%s3_Cells%s.fig',save_folder,para_override_txt),'fig');
+        h_grouped = [h_grouped]; % Add h_grouped
     end
-    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
-    
-    
-    title(sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc)))));
-    
-    if abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc))-left_targ_ind) == min(abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH)-left_targ_ind)) ...
-            || abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc)) - right_targ_ind) == min(abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH) - right_targ_ind))
-        set(gca,'color','y');
-    end
-    
-    axis tight;
-    y_min = min(y_min,min(ylim));
-    y_max = max(y_max,max(ylim));
+    disp('Different cells done');
 end
-
-set(hs,'ylim',[y_min y_max]);
-
-% -- Weights --
-axes(hs(end-4));
-h1 = imagesc(prefs_lip,prefs_lip,w_lip_lip'); axis  xy; title('LIP->LIP');
-xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
-set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
-% set(h1,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_lip,w_lip_lip'});
-
-axes(hs(end-3));
-h2 = imagesc(prefs_int,prefs_lip,w_lip_int');  axis xy; title('Int->LIP');
-xlabel('\theta_{lip}'); ylabel('\theta_{int}');
-set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
-% set(h2,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_int,w_lip_int'});
-
-axes(hs(end-2));
-h3 = imagesc(prefs_vis,prefs_int,w_int_vis'); axis xy; title('Vis->Int');
-xlabel('\theta_{int}'); ylim([-30 30]);    ylabel('\theta_{vis}');
-set(gca,'xtick',-180:90:180);
-% set(h3,'ButtonDownFcn',{@plot_weight,prefs_int,prefs_vis,w_int_vis'});
-
-axes(hs(end-1));
-h3 = imagesc(prefs_vest,prefs_int,w_int_vest'); axis xy; title('Vest->Int');
-xlabel('\theta_{int}'); ylim([-30 30]);    ylabel('\theta_{vest}');
-set(gca,'xtick',-180:90:180);
-% set(h3,'ButtonDownFcn',{@plot_weight,prefs_int,prefs_vis,w_int_vis'});
-
-colormap hot;
-
-if ION_cluster
-    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s3_Cells%s.png',save_folder,para_override_txt));
-    saveas(gcf,sprintf('./result/%s3_Cells%s.fig',save_folder,para_override_txt),'fig');
-    h_grouped = [h_grouped]; % Add h_grouped
-end
-disp('Different cells done');
 
 %% ====== Fig.3.5 Different cells, PSTH ======
-
-figure(1003); clf;
-set(gcf,'name','Different cells, PSTH');
-set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
-
-% -- PSTH for all headings --
-
-m = fix(sqrt(length(to_plot_single_cell_PSTH)+5));
-n = ceil((length(to_plot_single_cell_PSTH)+5)/m);
-[~,hs] = tight_subplot(m,n,0.05);
-y_max = -inf; y_min = inf;
-
-for cc = 1:length(to_plot_single_cell_PSTH)
-    axes(hs(cc)); hold on;
+if analysis_switch(6)
     
-    for ss = 1:length(unique_stim_type)
-        plot(ts,PSTH_correct_mean_allheading(to_plot_single_cell_PSTH(cc),:,ss,1),'linestyle','-','color',colors(unique_stim_type(ss),:),'linew',2.5);
-        plot(ts,PSTH_correct_mean_allheading(to_plot_single_cell_PSTH(cc),:,ss,2),'linestyle','--','color',colors(unique_stim_type(ss),:),'linew',2.5);
+    figure(1003); clf;
+    set(gcf,'name','Different cells, PSTH');
+    set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
+    
+    % -- PSTH for all headings --
+    
+    m = fix(sqrt(length(to_plot_single_cell_PSTH)+5));
+    n = ceil((length(to_plot_single_cell_PSTH)+5)/m);
+    [~,hs] = tight_subplot(m,n,0.05);
+    y_max = -inf; y_min = inf;
+    
+    for cc = 1:length(to_plot_single_cell_PSTH)
+        axes(hs(cc)); hold on;
+        
+        for ss = 1:length(unique_stim_type)
+            plot(ts,PSTH_correct_mean_allheading(to_plot_single_cell_PSTH(cc),:,ss,1),'linestyle','-','color',colors(unique_stim_type(ss),:),'linew',2.5);
+            plot(ts,PSTH_correct_mean_allheading(to_plot_single_cell_PSTH(cc),:,ss,2),'linestyle','--','color',colors(unique_stim_type(ss),:),'linew',2.5);
+        end
+        
+        plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+        
+        title(sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc)))));
+        
+        % Mark the nearest cells to the targets
+        if abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc))-left_targ_ind) == min(abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH)-left_targ_ind)) ...
+                || abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc)) - right_targ_ind) == min(abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH) - right_targ_ind))
+            set(gca,'color','y');
+        end
+        
+        axis tight;
+        y_min = min(y_min,min(ylim));
+        y_max = max(y_max,max(ylim));
     end
     
-    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+    set(hs,'ylim',[y_min y_max]);
     
-    title(sprintf('pref = %g',prefs_lip(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc)))));
-    
-    % Mark the nearest cells to the targets
-    if abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc))-left_targ_ind) == min(abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH)-left_targ_ind)) ...
-       || abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH(cc)) - right_targ_ind) == min(abs(to_calculate_PSTH_cells_ind(to_plot_single_cell_PSTH) - right_targ_ind))
-        set(gca,'color','y');
+    if ION_cluster
+        export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s3p5_Cells_PSTH%s.png',save_folder,para_override_txt));
+        saveas(gcf,sprintf('./result/%s3p5_Cells_PSTH%s.fig',save_folder,para_override_txt),'fig');
     end
-    
-    axis tight;
-    y_min = min(y_min,min(ylim));
-    y_max = max(y_max,max(ylim));
+    disp('Different cells done');
 end
-
-set(hs,'ylim',[y_min y_max]);
-
-if ION_cluster
-    export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s3p5_Cells_PSTH%s.png',save_folder,para_override_txt));
-    saveas(gcf,sprintf('./result/%s3p5_Cells_PSTH%s.fig',save_folder,para_override_txt),'fig');
-end
-disp('Different cells done');
 
 %% ====== Fig.4 Heterogeneity and Decoding Weights ========
-if length(unique_stim_type) == 3
+if analysis_switch(7)
     
-    figure(1418); clf
-    set(gcf,'name','Heterogeneity and Decoding Weights');
-    set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
-
-    hs = tight_subplot(2,3,0.1);
-    
-    % -- Multisensory enhancement --
-    axes(hs(1));
-    div_vest = mean(diff_PSTH_correct_mean_allheading(:,:,1),2);
-    div_vis = mean(diff_PSTH_correct_mean_allheading(:,:,2),2);
-    div_comb = mean(diff_PSTH_correct_mean_allheading(:,:,3),2);
-    div_comb_minus_vest = div_comb - div_vest;
-    div_comb_minus_vis = div_comb - div_vis;
-    
-    cols = colormap(jet);
-    
-    % Fit color to to N_sample_cell/4
-    cols = interp1(1:length(cols),cols,1:length(cols)/(N_sample_cell/4+4):length(cols));
-    
-    for cc = 1:N_sample_cell
-        dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3));
-        this_col = cols(1+dis_prop,:);
-        plot(div_comb_minus_vest(cc),div_comb_minus_vis(cc),'og','markersize',7,'color',this_col,'linewid',2); hold on;
-    end
-    
-    xlabel('Comb - Vest'); ylabel('Comb - Vis');
-    max_axis = max(abs([ylim xlim]));
-    plot([0 0],[-max_axis max_axis],'--k');
-    plot([-max_axis max_axis],[0 0],'--k');
-    plot([-max_axis max_axis],[-max_axis max_axis],'--k');
-    axis tight square;
-    
-    % -- SVM weights --
-    axes(hs(2));
-    plot(prefs_lip,svm_weight,'k');
-    xlim([-180 180]);
-    set(gca,'xtick',-180:90:180);
-    xx = prefs_lip(to_calculate_PSTH_cells_ind);
-    yy = svm_weight(to_calculate_PSTH_cells_ind);
-    hold on;
-    for cc = 1:N_sample_cell
-        dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3));
-        this_col = cols(1+dis_prop,:);
-        plot(xx(cc),yy(cc),'og','markersize',7,'color',this_col,'linewid',2); hold on;
-    end
-    
-    % plot(prefs_lip,svm_toy_weight,'m','linew',2);
-    
-    xlabel('Prefs_{LIP}'); ylabel('SVM weight');
-    title(sprintf('Best C = %g, CR = %g',Cs(bestC),correct_rate_svm_test_Cs(bestC)));
-    
-    % -- SVM weights vs Div_vest --
-    xxs = {div_vest, 'Divergence vest';
-           div_vis,  'Divergence vis';
-           div_comb, 'Divergence comb';
-           div_comb_minus_vest + div_comb_minus_vis, '(comb-vest)+(comb-vis)'};
-    
-    for xxxx = 1:length(xxs)
-        xx = xxs{xxxx,1};
-        yy = abs(svm_weight(to_calculate_PSTH_cells_ind));
-        hl = LinearCorrelation(xx,yy,'Axes',hs(2+xxxx));
+    if length(unique_stim_type) == 3
+        
+        figure(1418); clf
+        set(gcf,'name','Heterogeneity and Decoding Weights');
+        set(gcf,'uni','norm','pos',[0.014        0.06       0.895       0.829]);
+        
+        hs = tight_subplot(2,3,0.1);
+        
+        % -- Multisensory enhancement --
+        axes(hs(1));
+        div_vest = mean(diff_PSTH_correct_mean_allheading(:,:,1),2);
+        div_vis = mean(diff_PSTH_correct_mean_allheading(:,:,2),2);
+        div_comb = mean(diff_PSTH_correct_mean_allheading(:,:,3),2);
+        div_comb_minus_vest = div_comb - div_vest;
+        div_comb_minus_vis = div_comb - div_vis;
+        
+        cols = colormap(jet);
+        
+        % Fit color to to N_sample_cell/4
+        cols = interp1(1:length(cols),cols,1:length(cols)/(N_sample_cell/4+4):length(cols));
+        
+        for cc = 1:N_sample_cell
+            dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3));
+            this_col = cols(1+dis_prop,:);
+            plot(div_comb_minus_vest(cc),div_comb_minus_vis(cc),'og','markersize',7,'color',this_col,'linewid',2); hold on;
+        end
+        
+        xlabel('Comb - Vest'); ylabel('Comb - Vis');
+        max_axis = max(abs([ylim xlim]));
+        plot([0 0],[-max_axis max_axis],'--k');
+        plot([-max_axis max_axis],[0 0],'--k');
+        plot([-max_axis max_axis],[-max_axis max_axis],'--k');
+        axis tight square;
+        
+        % -- SVM weights --
+        axes(hs(2));
+        plot(prefs_lip,svm_weight,'k');
+        xlim([-180 180]);
+        set(gca,'xtick',-180:90:180);
+        xx = prefs_lip(to_calculate_PSTH_cells_ind);
+        yy = svm_weight(to_calculate_PSTH_cells_ind);
         hold on;
-        delete([hl.leg hl.group.dots]);
         for cc = 1:N_sample_cell
             dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3));
             this_col = cols(1+dis_prop,:);
             plot(xx(cc),yy(cc),'og','markersize',7,'color',this_col,'linewid',2); hold on;
         end
-        text(min(xlim),min(ylim)+range(ylim)*0.2,sprintf('r^2=%g\n p=%g',hl.group.r_square,hl.group.p))
-        xlabel(xxs{xxxx,2}); ylabel('abs(svm weight)');
+        
+        % plot(prefs_lip,svm_toy_weight,'m','linew',2);
+        
+        xlabel('Prefs_{LIP}'); ylabel('SVM weight');
+        title(sprintf('Best C = %g, CR = %g',Cs(bestC),correct_rate_svm_test_Cs(bestC)));
+        
+        % -- SVM weights vs Div_vest --
+        xxs = {div_vest, 'Divergence vest';
+            div_vis,  'Divergence vis';
+            div_comb, 'Divergence comb';
+            div_comb_minus_vest + div_comb_minus_vis, '(comb-vest)+(comb-vis)'};
+        
+        for xxxx = 1:length(xxs)
+            xx = xxs{xxxx,1};
+            yy = abs(svm_weight(to_calculate_PSTH_cells_ind));
+            hl = LinearCorrelation(xx,yy,'Axes',hs(2+xxxx));
+            hold on;
+            delete([hl.leg hl.group.dots]);
+            for cc = 1:N_sample_cell
+                dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3));
+                this_col = cols(1+dis_prop,:);
+                plot(xx(cc),yy(cc),'og','markersize',7,'color',this_col,'linewid',2); hold on;
+            end
+            text(min(xlim),min(ylim)+range(ylim)*0.2,sprintf('r^2=%g\n p=%g',hl.group.r_square,hl.group.p))
+            xlabel(xxs{xxxx,2}); ylabel('abs(svm weight)');
+        end
+        
+        if ION_cluster
+            file_name = sprintf('./result/%s4_Heterogeneity%s',save_folder,para_override_txt);
+            export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+            saveas(gcf,[file_name '.fig'],'fig');
+            h_grouped = [h_grouped hs(1:6)']; % Add h_grouped
+        end
+        
     end
-   
-if ION_cluster
-    file_name = sprintf('./result/%s4_Heterogeneity%s',save_folder,para_override_txt);
-    export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
-    saveas(gcf,[file_name '.fig'],'fig');
-    h_grouped = [h_grouped hs(1:6)']; % Add h_grouped
 end
-
-end
-
 %% ===== Fig.5 Linear regression of Rcomb = Wvest * Rvest + Wvis * Rvis
-
-% ======  Part I: Small window steps =======
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-t_span = 0.2;    
-%         t_span = 1000;
-t_step = 0.05; % For time evolution
-toi = [0.95 1.3] ;   % Time of interests for weights illustration
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-to_plot_linear = 1:N_sample_cell;
-
-% PSTH_correct_mean_headings = [cell_for_regression time stim_type abs_heading choice];
-
-t_centers = ts(1) + t_span / 2 : t_step : ts(end)-t_span / 2;
-
-weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
-% measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
-
-for i = 1:length(to_plot_linear)  % For each cell
-
-    for tcc = 1:length(t_centers) % For each time bin
-
-        t_range = t_centers(tcc) - t_span / 2 <= ts & ts <= t_centers(tcc) + t_span / 2;
-
-        r = [];
-        for k = 1:3
-            r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
-        end
-
-        r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each 
-
-        % if tcc == 17    keyboard; end
+if analysis_switch(8)
+    
+    % ======  Part I: Small window steps =======
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    t_span = 0.2;
+    %         t_span = 1000;
+    t_step = 0.05; % For time evolution
+    toi = [0.95 1.3] ;   % Time of interests for weights illustration
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+    to_plot_linear = 1:N_sample_cell;
+    
+    % PSTH_correct_mean_headings = [cell_for_regression time stim_type abs_heading choice];
+    
+    t_centers = ts(1) + t_span / 2 : t_step : ts(end)-t_span / 2;
+    
+    weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
+    % measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
+    
+    for i = 1:length(to_plot_linear)  % For each cell
+        
+        for tcc = 1:length(t_centers) % For each time bin
             
-        % GLM fit
-        [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
-        [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
-
-        weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
-
-        % yfit = r(:,1:2) * b;
-        % measure_pred_all((i-1)*10 + 1:(i-1)*10+size(r,1),:,tcc) = [r(:,3) yfit];
-
-        % r = r([end:-2:2 1:2:end-1],:);
-        % yfit = glmval(b,r(:,1:2),'identity');
-        % figure(348); hold on; plot(1:10,r(:,3),'o',1:10,yfit,'r-');
-
-    end
-end
-
-figure(7252243);
-set(gcf,'uni','norm','pos',[0.005       0.057       0.958       0.822]);clf; hold on;
-subplot(2,4,[1]);
-mean_paras = squeeze(mean(weight_vest_vis(:,[1 2 end-1],:),1))';
-sem_paras = squeeze(std(weight_vest_vis(:,[1 2 end-1],:)))'/sqrt(size(weight_vest_vis,1));
-
-temp_col = {'b','r','k'};
-temp_marker = {'s','o','o'}; % {'','',''};
-for pp = 1 : 3
-    h = shadedErrorBar(repmat(t_centers',1,1),mean_paras(:,pp),sem_paras(:,pp),{[temp_marker{pp} temp_col{pp} '-'],'linew',2,'markersize',10});
-    hold on;
-end
-axis tight;
-
-plot(repmat(t_centers',1,1),mean_paras(:,1)+mean_paras(:,2),'g','linew',2);
-plot(xlim,[1 1],'g:','linew',3);
-
-set(legend('w_{vest}','w_{vis}','R^2'),'location','best'); axis tight; %ylim([0 max(ylim)])
-xlabel(sprintf('Center of %g ms window',t_span)); ylabel('Median'); 
-
-% Gaussian vel
-plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
-
-%% ======  Part I: Large window, R^2 and weight. Figure 5 of Gu 2008  =====
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-toi = [0.95 1.3] ;   % Time of interests for weights illustration
-t_span_large = 1;    
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-t_centers = toi;
-
-to_plot_linear = 1:N_sample_cell;
-% PSTH_correct_mean_headings = [cell_for_regression time stim_type abs_heading choice];
-
-weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
-measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
-
-for i = 1:length(to_plot_linear)  % For each cell
-
-    for tcc = 1:length(t_centers) % For each time bin
-
-        t_range = t_centers(tcc) - t_span_large / 2 <= ts & ts <= t_centers(tcc) + t_span_large / 2;
-
-        r = [];
-        for k = 1:3
-            r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
-        end
-
-        r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each 
-
-        % if tcc == 17    keyboard; end
+            t_range = t_centers(tcc) - t_span / 2 <= ts & ts <= t_centers(tcc) + t_span / 2;
             
-        % GLM fit
-        [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
-        [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
-
-        weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
-
-        yfit = r(:,1:2) * b;
-        measure_pred_all((i-1)*10 + 1:(i-1)*10+size(r,1),:,tcc) = [r(:,3) yfit];
-
-        % r = r([end:-2:2 1:2:end-1],:);
-        % yfit = glmval(b,r(:,1:2),'identity');
-        % figure(348); hold on; plot(1:10,r(:,3),'o',1:10,yfit,'r-');
-
+            r = [];
+            for k = 1:3
+                r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
+            end
+            
+            r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
+            
+            % if tcc == 17    keyboard; end
+            
+            % GLM fit
+            [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
+            [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
+            
+            weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
+            
+            % yfit = r(:,1:2) * b;
+            % measure_pred_all((i-1)*10 + 1:(i-1)*10+size(r,1),:,tcc) = [r(:,3) yfit];
+            
+            % r = r([end:-2:2 1:2:end-1],:);
+            % yfit = glmval(b,r(:,1:2),'identity');
+            % figure(348); hold on; plot(1:10,r(:,3),'o',1:10,yfit,'r-');
+            
+        end
+    end
+    
+    figure(7252243);
+    set(gcf,'uni','norm','pos',[0.005       0.057       0.958       0.822]);clf; hold on;
+    subplot(2,4,[1]);
+    mean_paras = squeeze(mean(weight_vest_vis(:,[1 2 end-1],:),1))';
+    sem_paras = squeeze(std(weight_vest_vis(:,[1 2 end-1],:)))'/sqrt(size(weight_vest_vis,1));
+    
+    temp_col = {'b','r','k'};
+    temp_marker = {'s','o','o'}; % {'','',''};
+    for pp = 1 : 3
+        h = shadedErrorBar(repmat(t_centers',1,1),mean_paras(:,pp),sem_paras(:,pp),{[temp_marker{pp} temp_col{pp} '-'],'linew',2,'markersize',10});
+        hold on;
+    end
+    axis tight;
+    
+    plot(repmat(t_centers',1,1),mean_paras(:,1)+mean_paras(:,2),'g','linew',2);
+    plot(xlim,[1 1],'g:','linew',3);
+    
+    set(legend('w_{vest}','w_{vis}','R^2'),'location','best'); axis tight; %ylim([0 max(ylim)])
+    xlabel(sprintf('Center of %g ms window',t_span)); ylabel('Median');
+    
+    % Gaussian vel
+    plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+    
+    %% ======  Part I: Large window, R^2 and weight. Figure 5 of Gu 2008  =====
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    toi = [0.95 1.3] ;   % Time of interests for weights illustration
+    t_span_large = 1;
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    t_centers = toi;
+    
+    to_plot_linear = 1:N_sample_cell;
+    % PSTH_correct_mean_headings = [cell_for_regression time stim_type abs_heading choice];
+    
+    weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
+    measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
+    
+    for i = 1:length(to_plot_linear)  % For each cell
+        
+        for tcc = 1:length(t_centers) % For each time bin
+            
+            t_range = t_centers(tcc) - t_span_large / 2 <= ts & ts <= t_centers(tcc) + t_span_large / 2;
+            
+            r = [];
+            for k = 1:3
+                r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
+            end
+            
+            r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
+            
+            % if tcc == 17    keyboard; end
+            
+            % GLM fit
+            [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
+            [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
+            
+            weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
+            
+            yfit = r(:,1:2) * b;
+            measure_pred_all((i-1)*10 + 1:(i-1)*10+size(r,1),:,tcc) = [r(:,3) yfit];
+            
+            % r = r([end:-2:2 1:2:end-1],:);
+            % yfit = glmval(b,r(:,1:2),'identity');
+            % figure(348); hold on; plot(1:10,r(:,3),'o',1:10,yfit,'r-');
+            
+        end
+    end
+    
+    % --- Plotting ---
+    for toii = 1:2
+        [~,toi_ind] = min(abs(toi(toii)-t_centers));
+        
+        sig_ind = weight_vest_vis(:,end,toi_ind)<0.05;
+        nsig_ind = weight_vest_vis(:,end,toi_ind)>=0.05;
+        
+        % Predicted v.s. measured
+        ax0 = subplot(2,4,2 + (toii-1)*4);
+        h = LinearCorrelation( measure_pred_all(:,1,toi_ind), measure_pred_all(:,2,toi_ind),...
+            'CombinedIndex',[],...
+            'Xlabel','Measured response','Ylabel','Predicted response',...
+            'FaceColors',{[0.9 0.9 0.9]},'Markers',{'.'},...
+            'LineStyles',{'k-'},'MarkerSize',10,...
+            'XHist',0,'YHist',0,...
+            'XHistStyle','grouped','YHistStyle','grouped','SameScale',1,'Method','Spearman','axes',ax0);
+        text(min(xlim)+2,min(ylim)+2,sprintf('r^2 = %g, p = %g',h.group(1).r_square,h.group(1).p),'FontSize',13);
+        legend off;
+        
+        % Distribution of R^2
+        ax1 = subplot(2,4,3 + (toii-1)*4);
+        h = HistComparison({weight_vest_vis(sig_ind,end-1,toi_ind),weight_vest_vis(nsig_ind,end-1,toi_ind)},...
+            'EdgeColors',{'k','k'},'FaceColors',{[.3 .3 .3 ],[0.9 0.9 0.9]},'XCenters',0.05:0.1:1,'MeanType','Median','Axes',ax1);
+        xlabel('R^2'); ylabel('Number of neurons'); xlim([0 1]); ylim([0 23]);
+        title(sprintf('t_{center} = %g (%g s window)',t_centers(toi_ind),t_span_large));
+        
+        % Vestibular / visual weights
+        ax2 = subplot(2,4,4 + (toii-1)*4);
+        %    plot(weight_vest_vis(:,1,toi_ind),weight_vest_vis(:,2,toi_ind),'o');
+        
+        %     h = LinearCorrelation({
+        %         weight_vest_vis(nsig_ind,1,toi_ind);
+        %         weight_vest_vis(sig_ind,1,toi_ind);
+        %         },...
+        %         {
+        %         weight_vest_vis(nsig_ind,2,toi_ind) ;
+        %         weight_vest_vis(sig_ind,2,toi_ind) ;
+        %         },...
+        %         'CombinedIndex',[],...
+        %         'Xlabel','Vestibular weight','Ylabel','Visual weight',...
+        %         'FaceColors',{[0.9 0.9 0.9],[.3 .3 .3 ]},'Markers',{'o'},...
+        %         'LineStyles',{'k--','k-'},'MarkerSize',9,...
+        %         'XHist',20,'YHist',10,...
+        %         'XHistStyle','stacked','YHistStyle','stacked','SameScale',1,'Method','Spearman','axes',ax2);
+        % text(min(xlim)+0.2,min(ylim)+0.2,sprintf('r^2 = %g, p = %g',h.group(2).r_square,h.group(2).p),'FontSize',13);
+        
+        % Fit color to to N_sample_cell/4
+        cols = colormap(jet);
+        cols = interp1(1:length(cols),cols,1:length(cols)/(N_sample_cell/4+4):length(cols));
+        for cc = 1:N_sample_cell
+            dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3));
+            this_col = cols(1+dis_prop,:);
+            plot(weight_vest_vis(cc,1,toi_ind),weight_vest_vis(cc,2,toi_ind),'o','markersize',7,'color',this_col,'linewid',2); hold on;
+        end
+        xlims = xlim; ylims = ylim;
+        xlims_new = [min(xlims(1),ylims(1)) max(xlims(2),ylims(2))];
+        xlims_new = [xlims_new(1)-range(xlims_new)/20 xlims_new(2)+range(xlims_new)/20];
+        
+        axis([xlims_new xlims_new]);
+        h.diag = plot([xlims_new(1) xlims_new(2)],[xlims_new(1) xlims_new(2)],'k:');
+        
+        if toii == 1 ; xlabel(''); end
+        plot(xlim,[0 0],'k--'); plot([0 0],ylim,'k--'); plot(xlim,[1 1],'k--'); plot([1 1],ylim,'k--');
+        legend off;
+        set(gca,'xtick',-10:1:10,'ytick',-10:1:10);
+        
+    end
+    
+    if ION_cluster
+        file_name = sprintf('./result/%s5_LinearRegression%s',save_folder,para_override_txt);
+        export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+        saveas(gcf,[file_name '.fig'],'fig');
+        % h_grouped = [h_grouped hs(1:6)']; % Add h_grouped
     end
 end
-
-% --- Plotting ---
-for toii = 1:2
-    [~,toi_ind] = min(abs(toi(toii)-t_centers));
-
-    sig_ind = weight_vest_vis(:,end,toi_ind)<0.05;
-    nsig_ind = weight_vest_vis(:,end,toi_ind)>=0.05;
-
-    % Predicted v.s. measured
-    ax0 = subplot(2,4,2 + (toii-1)*4);
-    h = LinearCorrelation( measure_pred_all(:,1,toi_ind), measure_pred_all(:,2,toi_ind),...
-        'CombinedIndex',[],...
-        'Xlabel','Measured response','Ylabel','Predicted response',...
-        'FaceColors',{[0.9 0.9 0.9]},'Markers',{'.'},...
-        'LineStyles',{'k-'},'MarkerSize',10,...
-        'XHist',0,'YHist',0,...
-        'XHistStyle','grouped','YHistStyle','grouped','SameScale',1,'Method','Spearman','axes',ax0);
-    text(min(xlim)+2,min(ylim)+2,sprintf('r^2 = %g, p = %g',h.group(1).r_square,h.group(1).p),'FontSize',13);
-    legend off;
-
-    % Distribution of R^2
-    ax1 = subplot(2,4,3 + (toii-1)*4);
-    h = HistComparison({weight_vest_vis(sig_ind,end-1,toi_ind),weight_vest_vis(nsig_ind,end-1,toi_ind)},...
-        'EdgeColors',{'k','k'},'FaceColors',{[.3 .3 .3 ],[0.9 0.9 0.9]},'XCenters',0.05:0.1:1,'MeanType','Median','Axes',ax1);
-    xlabel('R^2'); ylabel('Number of neurons'); xlim([0 1]); ylim([0 23]);
-    title(sprintf('t_{center} = %g (%g s window)',t_centers(toi_ind),t_span_large));
-
-    % Vestibular / visual weights
-    ax2 = subplot(2,4,4 + (toii-1)*4);
-%    plot(weight_vest_vis(:,1,toi_ind),weight_vest_vis(:,2,toi_ind),'o');
-
-%     h = LinearCorrelation({
-%         weight_vest_vis(nsig_ind,1,toi_ind);
-%         weight_vest_vis(sig_ind,1,toi_ind);
-%         },...
-%         {
-%         weight_vest_vis(nsig_ind,2,toi_ind) ;
-%         weight_vest_vis(sig_ind,2,toi_ind) ;
-%         },...
-%         'CombinedIndex',[],...
-%         'Xlabel','Vestibular weight','Ylabel','Visual weight',...
-%         'FaceColors',{[0.9 0.9 0.9],[.3 .3 .3 ]},'Markers',{'o'},...
-%         'LineStyles',{'k--','k-'},'MarkerSize',9,...
-%         'XHist',20,'YHist',10,...
-%         'XHistStyle','stacked','YHistStyle','stacked','SameScale',1,'Method','Spearman','axes',ax2);
-    % text(min(xlim)+0.2,min(ylim)+0.2,sprintf('r^2 = %g, p = %g',h.group(2).r_square,h.group(2).p),'FontSize',13);
-    
-    % Fit color to to N_sample_cell/4
-    cols = colormap(jet);
-    cols = interp1(1:length(cols),cols,1:length(cols)/(N_sample_cell/4+4):length(cols));
-    for cc = 1:N_sample_cell
-        dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3));
-        this_col = cols(1+dis_prop,:);
-        plot(weight_vest_vis(cc,1,toi_ind),weight_vest_vis(cc,2,toi_ind),'o','markersize',7,'color',this_col,'linewid',2); hold on;
-    end
-    xlims = xlim; ylims = ylim;
-    xlims_new = [min(xlims(1),ylims(1)) max(xlims(2),ylims(2))];
-    xlims_new = [xlims_new(1)-range(xlims_new)/20 xlims_new(2)+range(xlims_new)/20];
-    
-    axis([xlims_new xlims_new]);
-    h.diag = plot([xlims_new(1) xlims_new(2)],[xlims_new(1) xlims_new(2)],'k:');
-    
-    if toii == 1 ; xlabel(''); end
-    plot(xlim,[0 0],'k--'); plot([0 0],ylim,'k--'); plot(xlim,[1 1],'k--'); plot([1 1],ylim,'k--');
-    legend off;
-    set(gca,'xtick',-10:1:10,'ytick',-10:1:10);
-
-end
-
-if ION_cluster
-    file_name = sprintf('./result/%s5_LinearRegression%s',save_folder,para_override_txt);
-    export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
-    saveas(gcf,[file_name '.fig'],'fig');
-    % h_grouped = [h_grouped hs(1:6)']; % Add h_grouped
-end
-
 
 %%
 analysis_time = toc(analysis_time)

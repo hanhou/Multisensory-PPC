@@ -76,7 +76,6 @@ delay_another_for_visual = 0.1; % in s
 
 % ============ Decision bound ============
 if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
-read_out_at_the_RT = 1; % Readout decision at RT instead of at the end of each trial
 % f_bound = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
 
@@ -150,7 +149,7 @@ time_const_lip = 100e-3; % in s
 
 % ---- Visual to INTEGRATOR ----
 g_w_int_vest = 10; % Let's vary the gain separately
-g_w_int_vis = 10; 
+g_w_int_vis = 1; 
 dc_w_int_vis = 0;
 k_int_vis = 4; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider

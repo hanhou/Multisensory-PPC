@@ -6,7 +6,7 @@
 % lip_HH(para_override)
 % para_override: {'name1',value1; 'name2',value2, ...}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function result = lip_HH(para_override,output_result)
+function result = lip_HH_test(para_override,output_result)
 %clear
 %clear global
 
@@ -94,12 +94,10 @@ att_gain_stim_after_hit_bound = [0 0 0];
 % =============== Conditions ===============
 if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
-    conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
-    N_rep = 200; % For each condition
+    N_rep = 100; % For each condition
 else
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
-    conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
     N_rep = 10;
 end
@@ -149,8 +147,8 @@ time_const_int = 10000e-3; % in s
 time_const_lip = 100e-3; % in s
 
 % ---- Visual to INTEGRATOR ----
-g_w_int_vest = 10; % Let's vary the gain separately
 g_w_int_vis = 10; 
+g_w_int_vest = 10; % Let's vary the gain separately
 dc_w_int_vis = 0;
 k_int_vis = 4; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider
@@ -195,7 +193,7 @@ threshold_lip = 0.0;
 save_folder = '';
 
 % ==== Heterogeneity ====
-heter_enable = 0; % Master switch of heterogeneity
+heter_enable = 1; % Master switch of heterogeneity
 
 % --- "POST": Add heterogeneity in post synaptic parameters ---
 % Variability in:    g       k     dc                   
@@ -680,7 +678,7 @@ for hh = 1:length(unique_heading)  % Motion directions
     % proba_vis: proba of firing of visual neurons in response to motion
     max_rate_vis = r_spont_vis + b_pref_vis * coherence;
     b_vis = r_spont_vis + b_null_vis * coherence;
-    proba_vis_for_each_heading(:,hh) = ((max_rate_vis-b_vis)*exp(K_vis*(cos((prefs_vis'-(unique_heading(hh)+conflict_heading/2))/360*2*pi)-1))+b_vis)*dt;
+    proba_vis_for_each_heading(:,hh) = ((max_rate_vis-b_vis)*exp(K_vis*(cos((prefs_vis'-unique_heading(hh))/360*2*pi)-1))+b_vis)*dt;
     
     %     max_rate_vest = r_spont_vest + b_pref_vis * coherence;
     %     b_vis = r_spont_vis + b_null_vis * coherence;
@@ -689,7 +687,7 @@ for hh = 1:length(unique_heading)  % Motion directions
     % Here I just set the vestibular activity similar to visual response under 'equivalent_coh' coh
     max_rate_vest = r_spont_vest + b_pref_vest * equivalent_conherence;
     b_vest = r_spont_vest + b_null_vest * equivalent_conherence;
-    proba_vest_for_each_heading(:,hh) = ((max_rate_vest-b_vest)*exp(K_vest*(cos((prefs_vest'-(unique_heading(hh)-conflict_heading/2))/360*2*pi)-1))+b_vest)*dt;
+    proba_vest_for_each_heading(:,hh) = ((max_rate_vest-b_vest)*exp(K_vest*(cos((prefs_vest'-unique_heading(hh))/360*2*pi)-1))+b_vest)*dt;
     
     %         if if_debug
     %             figure(91);clf;
@@ -767,7 +765,7 @@ parfor tt = 1:n_parfor_loops % For each trial
     spikes_int_this = zeros(N_int,trial_dur_total_in_bins);
     spikes_lip_this = zeros(N_lip,trial_dur_total_in_bins);
     decision_ac = zeros(N_lip,trial_dur_total_in_bins+2);
-    
+     
     while k<=trial_dur_total_in_bins-1
         
         % -- Update INTEGRATOR layer --
@@ -780,10 +778,13 @@ parfor tt = 1:n_parfor_loops % For each trial
         %                         );
         
         % Just let the INTEGRATOR to be ideal. (straight sum)
-        rate_int_this(:,k+1) = rate_int_this(:,k)...   %  Self dynamics.  in Hz!
-            + att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input
-            + att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
-        
+%         rate_int_this(:,k+1) = rate_int_this(:,k)...   %  Self dynamics.  in Hz!
+%             + att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input
+%             + att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
+%         
+        rate_int_this(:,k+1) = ...   %  Self dynamics.  in Hz!
+            + 100*att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input
+            + 100*att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
         
         % -- Update LIP layer --
         rate_lip_this(:,k+1) = bias_lip + (1-dt/time_const_lip)*rate_lip_this(:,k)...   %  Self dynamics.  in Hz!
@@ -812,7 +813,7 @@ parfor tt = 1:n_parfor_loops % For each trial
         
         % -- Termination --
         % - Rate termination --
-%                 %{
+                %{
         if if_bounded && k*dt > stim_on_time + 0.5 && att_gain_stim == 1 ...
                 ... && (max(decision_ac(:,k+1)) > decis_thres_this)   % Only Max
                 && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
@@ -821,11 +822,11 @@ parfor tt = 1:n_parfor_loops % For each trial
                 ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
                 %}
             % - Time termination (Just for para_scanning other parameters!) -
-            %{
+%             %{
         if if_bounded && att_gain_stim == 1 && ...
                  ((unique_stim_type(ss_this)==1 && k*dt > stim_on_time + 0.75)...
                 ||(unique_stim_type(ss_this)==2 && k*dt > stim_on_time + 1.00)...
-                ||(unique_stim_type(ss_this)==3 && k*dt > stim_on_time + 0.8))
+                ||(unique_stim_type(ss_this)==3 && k*dt > stim_on_time + 0.9))
             %}
             % Set the attention for motion stimuli to zero
             att_gain_stim = att_gain_this(ss_this);
