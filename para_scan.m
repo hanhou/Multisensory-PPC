@@ -23,20 +23,20 @@
 %     for thr_comb = [28:2:58 inf]
 %         n=n+1;
 %         result = lip_HH({'decis_thres',[thr_single thr_single thr_comb]},{'psycho','RT'});
-%         
+%
 %         group_result(n,:) = [thr_single thr_comb result.psycho(:)']
-%        
+%
 %     end
 % end
 
 %% 20170509_bounds_scan_RT
-% group_result = []; 
+% group_result = [];
 % bounds = [28:1:55 inf];
-% 
+%
 % for bb = 1:length(bounds)
 %     result = lip_HH({'decis_thres',[bounds(bb) bounds(bb) nan];'unique_stim_type',[1 2];'save_folder','20170509_bounds_scan_RT/'},{'psycho','RT'});
 %     group_result(bb,[1 2 3 5 6]) = [bounds(bb) result.psycho(:,2)' squeeze(mean(mean(result.RT,1),2))'];
-% 
+%
 %     result = lip_HH({'decis_thres',[nan nan bounds(bb)];'unique_stim_type',[3];'save_folder','20170509_bounds_scan_RT/'},{'psycho','RT'});
 %     group_result(bb,[4 7]) = [result.psycho(:,2)' squeeze(mean(mean(result.RT,1),2))']
 % end
@@ -50,7 +50,7 @@
 %         lip_HH({'g_w_lip_lip',g_w_lip_lip;'dc_w_lip_lip',dc_w_lip_lip;'save_folder','20170510_lipTolip_fixedRT/'});
 %     end
 % end
-    
+
 %% 20170510_intTolip_fixedRT
 % n=0;
 % for g_w_lip_int = 5:2:20
@@ -71,7 +71,7 @@
 %% 20170529_dropout (non-scaled) and log normal
 % drop_outs = 0:0.1:0.5;
 % lognormal_ratio = 0.1:0.3:2;
-% 
+%
 % for dd = 1:length(drop_outs)
 %     for ll = 1:length(lognormal_ratio)
 %         heter_dropout = ones(1,4)*drop_outs(dd);
@@ -110,12 +110,12 @@ end
 %}
 
 %% 20170530_scaled drop out and log normal with grouped figure
-%{
+% %{
 clear
 scan = tic;
 % save_folder = '20170602_drop0.6_lognorm1.2/';
 % save_folder = '20170609_rescan_with_SVM_0.6_1.8/';
-save_folder = '20170613_SVM_rescaled_and_weight_noise_corr_-1_1.5/';
+% save_folder = '20170613_SVM_rescaled_and_weight_noise_corr_-1_1.5/';
 
 % Coarse
 % drop_outs = 0:0.1:0.8;
@@ -130,61 +130,70 @@ save_folder = '20170613_SVM_rescaled_and_weight_noise_corr_-1_1.5/';
 % lognormal_ratio = 1.8*ones(1,5);
 
 % Test
-% xs = 0.6 ; x_name = 'drop_outs'; 
+% xs = 0.6 ; x_name = 'drop_outs';
 % ys = 1.2; y_name = 'lognormal_ratio';
 
 % log-normal and vis/vest negative noise correlation
 % xs = 0:-0.1:-1;  x_name = 'vis_vest_weight_noise_cor';
-% ys = 0:0.3:4;  y_name = 'heter_lognormal'; 
+% ys = 0:0.3:4;  y_name = 'heter_lognormal';
 
 % xs = 0:-0.5:-2;  x_name = 'vis_vest_weight_noise_cor';
-% ys = 0:0.5:3;  y_name = 'heter_lognormal'; 
+% ys = 0:0.5:3;  y_name = 'heter_lognormal';
 
-xs = -1*ones(1,3);  x_name = 'vis_vest_weight_noise_cor';
-ys = 1.5*ones(1,4);  y_name = 'heter_lognormal'; 
+save_folder = '20171118_dropout_and_lognormal';
+xs = 0:0.2:0.8;  x_name = 'heter_dropout';
+ys = 0:0.5:3;  y_name = 'heter_lognormal';
+
+%% Save para_scan file
+copyfile([mfilename('fullpath') '.m'],sprintf('./result/%s/',save_folder));
+
 
 initiated = 0;
 
-total_n = length(xs)*length(ys);
+total_n = length(xs)*length(ys)
+errors = {};
 
 for xx = 1:length(xs)
     for yy = 1:length(ys)
-        
-        result = lip_HH({x_name, xs(xx); y_name, ones(1,4)*ys(yy);...
-            'save_folder',save_folder},{'h_grouped'});
-        
-        finished = (xx-1)*length(ys)+yy;
-        fprintf('=== Grouped progress: %g / %g ===\n',finished,total_n);
-        fprintf('=== Estimated remaining time: %s ===\n', datestr(toc(scan)/finished*(total_n-finished)/24/3600,'HH:MM'));
-        
-        h_grouped = result.h_grouped;
-        
-        % Initiated once
-        if ~initiated
+        try
+            result = lip_HH({x_name, ones(1,4)*xs(xx); y_name, ones(1,4)*ys(yy);...
+                'save_folder',save_folder},{'h_grouped'});
+            
+            finished = (xx-1)*length(ys)+yy;
+            fprintf('=== Grouped progress: %g / %g ===\n',finished,total_n);
+            fprintf('=== Estimated remaining time: %s ===\n', datestr(toc(scan)/finished*(total_n-finished)/24/3600,'HH:MM'));
+            
+            h_grouped = result.h_grouped;
+            
+            % Initiated once
+            if ~initiated
+                for ff = 1:length(h_grouped)
+                    figure(1700+ff); clf;
+                    set(gcf,'uni','norm','pos',[0.051       0.068       0.914        0.79]);
+                    hs{ff} = tight_subplot(length(xs),length(ys),0.02); % Column-wise
+                end
+                initiated = 1;
+            end
+            
+            % Copy grouped figure
             for ff = 1:length(h_grouped)
-                figure(1700+ff); clf; 
-                set(gcf,'uni','norm','pos',[0.051       0.068       0.914        0.79]);
-                hs{ff} = tight_subplot(length(xs),length(ys),0.02); % Column-wise
+                this_f = figure(1700+ff);
+                set(gcf,'name',sprintf('%s, %s',x_name,y_name));
+                h_copyed = copyobj(h_grouped(ff),this_f);
+                linkprop([hs{ff}(xx+(yy-1)*length(xs)),h_copyed],'pos'); % Put the figure into subfigure
+                
+                if ~(yy==1 && xx==length(xs))
+                    set(h_copyed,'xtick',[],'ytick',[]);
+                end
+                
+                xlabel(h_copyed,''); ylabel(h_copyed,''); title(h_copyed,'');
+                
+                if yy == 1;  ylabel(h_copyed,num2str(xs(xx))); end
+                if xx == 1;  title(h_copyed,num2str(ys(yy))); end
+                drawnow;
             end
-            initiated = 1;
-        end
-        
-        % Copy grouped figure
-        for ff = 1:length(h_grouped)
-            this_f = figure(1700+ff);
-            set(gcf,'name',sprintf('%s, %s',x_name,y_name));
-            h_copyed = copyobj(h_grouped(ff),this_f);
-            linkprop([hs{ff}(xx+(yy-1)*length(xs)),h_copyed],'pos'); % Put the figure into subfigure
-            
-            if ~(yy==1 && xx==length(xs))
-                set(h_copyed,'xtick',[],'ytick',[]);
-            end
-            
-            xlabel(h_copyed,''); ylabel(h_copyed,''); title(h_copyed,'');
-            
-            if yy == 1;  ylabel(h_copyed,num2str(xs(xx))); end
-            if xx == 1;  title(h_copyed,num2str(ys(yy))); end
-            drawnow;    
+        catch error
+            errors = {errors, error};
         end
     end
 end
@@ -197,8 +206,8 @@ for ff = 1:length(h_grouped)
     
     % Adjust
     hhs = findobj(gcf,'type','axes');
-    axis(hhs,'tight');
-    % linkaxes(hhs,'x');
+    % axis(hhs,'tight');
+    linkaxes(hhs,'xy');
     
     %{
         for i=1:length(hhs)
@@ -228,7 +237,7 @@ save_folder = '20170914_Scan weights gain_no noise_conflict4/';
 % Coarse
 
 xs = 10*10.^(-0.6:0.2:0.6);  x_name = 'g_w_int_vest';
-ys = 10*10.^(-0.6:0.2:0.6);  y_name = 'g_w_int_vis'; 
+ys = 10*10.^(-0.6:0.2:0.6);  y_name = 'g_w_int_vis';
 
 group_result = [];
 
@@ -254,7 +263,7 @@ for xx = 1:length(xs)
         % Initiated once
         if ~initiated
             for ff = 1:length(h_grouped)
-                figure(1700+ff); clf; 
+                figure(1700+ff); clf;
                 set(gcf,'uni','norm','pos',[0.051       0.068       0.914        0.79]);
                 hs{ff} = tight_subplot(length(xs),length(ys),0.02); % Column-wise
             end
@@ -276,7 +285,7 @@ for xx = 1:length(xs)
             
             if yy == 1;  ylabel(h_copyed,num2str(xs(xx))); end
             if xx == 1;  title(h_copyed,num2str(ys(yy))); end
-            drawnow;    
+            drawnow;
         end
     end
 end
@@ -292,24 +301,23 @@ for ff = 1:length(h_grouped)
     axis(hhs,'tight');
     % linkaxes(hhs,'x');
     
-    %{
+%{
         for i=1:length(hhs)
             axes(hhs(i));
             pos=get(gca,'pos');
             set(gca,'pos',[pos(1:2) pos(3)/1.32 pos(4)/1.14])
         end
-    %}
+%}
     
     % Save figure
     export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%sGrouped_%g.png',save_folder,ff));
     saveas(gcf,sprintf('./result/%sGrouped_%g.fig',save_folder,ff),'fig');
     
 end
-save(sprintf('./result/%spsyho_scan_weight_gain_no_noise.mat',save_folder),'group_result');  
+save(sprintf('./result/%spsyho_scan_weight_gain_no_noise.mat',save_folder),'group_result');
 disp('Grouped done');
 
 toc(scan);
-%}
 
 %% Plot result for this scan (threshold)
 % load psyho_scan_weight_gain_no_noise;
@@ -358,3 +366,127 @@ set(gca,'xaxisloc','top','xticklabel','','ytick',1:length(xs),'yticklabel',num2s
 % Save figure
 export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%spsycho_scan_bias.png',save_folder));
 saveas(gcf,sprintf('./result/%spsycho_scan_bias.fig',save_folder),'fig');
+%}
+
+%% 201701103_Scan time-varying weight factor gamma
+%{
+clear
+scan = tic;
+% save_folder = '20171104_Time-varying gamma/';
+% save_folder = '20171104_Time-varying gamma_fixed RT 1.00/';
+save_folder = '20171109_Time-varying gamma_Max_the_same_Information/';
+% Coarse
+
+% xs = [0 1];   x_name = 'gamma'; % Rows
+% ys = [5 10 20 40]; y_name = 'runs'; % Columns
+
+xs = 1;   x_name = 'runs'; % Rows
+ys = [0 0.5 1 1.5 2]; y_name = 'gamma'; % Columns
+
+
+group_result = [];
+
+initiated = 0;
+
+total_n = length(xs)*length(ys);
+errors = {};
+
+for xx = 1:length(xs)
+    for yy = 1:length(ys)
+        try
+            result = lip_HH({'gamma', ys(yy); 'N_rep',200; ...  % Fewer N_reps, different runs
+                'save_folder',save_folder},{'h_grouped';'psycho';'thres_boot'});
+            %         result = lip_HH({x_name, xs(xx); 'g_w_int_vest',ys(yy) ; 'g_w_int_vis',ys(yy);...  % Fewer N_reps, different runs
+            %             'save_folder',save_folder},{'h_grouped';'psycho';'thres_boot'});
+            
+            finished = (xx-1)*length(ys) +yy;
+            group_result = [group_result; xs(xx) result.psycho(:)']
+            group_thres_boot{finished} = result.thres_boot;
+            
+            fprintf('=== Grouped progress: %g / %g ===\n',finished,total_n);
+            fprintf('=== Estimated time: %s ===\n', datestr(toc(scan)/finished*(total_n-finished)/24/3600,'HH:MM'));
+            
+            h_grouped = result.h_grouped;
+            
+            % Initiated once
+            if ~initiated
+                for ff = 1:length(h_grouped)
+                    figure(1700+ff); clf;
+                    set(gcf,'uni','norm','pos',[0.051       0.068       0.914        0.79]);
+                    hs{ff} = tight_subplot(length(xs),length(ys),0.02); % Column-wise
+                end
+                initiated = 1;
+            end
+            
+            % Copy grouped figure
+            for ff = 1:length(h_grouped)
+                this_f = figure(1700+ff);
+                set(gcf,'name',sprintf('%s, %s',x_name,y_name));
+                h_copyed = copyobj(h_grouped(ff),this_f);
+                linkprop([hs{ff}(xx+(yy-1)*length(xs)),h_copyed],'pos'); % Put the figure into subfigure
+                
+                if ~(yy==1 && xx==length(xs))
+                    set(h_copyed,'xtick',[],'ytick',[]);
+                end
+                
+                xlabel(h_copyed,''); ylabel(h_copyed,''); title(h_copyed,'');
+                
+                if yy == 1;  ylabel(h_copyed,num2str(xs(xx))); end
+                if xx == 1;  title(h_copyed,num2str(ys(yy))); end
+                drawnow;
+            end
+        catch error
+            errors = {errors,error};
+        end
+    end
+end
+
+for ff = 1:length(h_grouped)
+    figure(1700+ff);
+    
+    % Clean up
+    delete(hs{ff});
+    
+    % Adjust
+    hhs = findobj(gcf,'type','axes');
+    axis(hhs,'tight');
+    % linkaxes(hhs,'x');
+    
+%{
+        for i=1:length(hhs)
+            axes(hhs(i));
+            pos=get(gca,'pos');
+            set(gca,'pos',[pos(1:2) pos(3)/1.32 pos(4)/1.14])
+        end
+%}
+    
+    % Save figure
+    export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%sGrouped_%g.png',save_folder,ff));
+    saveas(gcf,sprintf('./result/%sGrouped_%g.fig',save_folder,ff),'fig');
+    
+end
+
+save(sprintf('./result/%spsyho_scan_gamma_no_noise.mat',save_folder),'group_result','group_thres_boot');
+disp('Grouped done');
+
+toc(scan);
+
+%% Plot result for this scan (threshold)
+% load psyho_scan_gamma_no_noise;
+% xs = [0 0.1 0.3 0.5 1 2 4 8];
+figure(1654); clf; hold on;
+for gg = 1:length(xs)
+    this_boot = group_thres_boot{gg};
+    pred_ratio = this_boot(3,:)./this_boot(4,:);
+    mean_pred_ratios(gg) = mean(pred_ratio);
+    err_pred_ratios(gg) = std(pred_ratio);
+end
+errorbar(xs,mean_pred_ratios,err_pred_ratios);
+
+% Save figure
+export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%sPred_ratio.png',save_folder));
+saveas(gcf,sprintf('./result/%sPred_ratio.fig',save_folder),'fig');
+%}
+
+
+

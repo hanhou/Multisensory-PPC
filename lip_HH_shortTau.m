@@ -81,13 +81,13 @@ read_out_at_the_RT = 1; % Readout decision at RT instead of at the end of each t
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
 
 % Smoothed max
-decis_thres = 32*[1 1 1] + 3.5*[0 0 1]; % bound height, for different conditions
-% decis_thres = [inf inf inf]; % bound height, for different conditions
+decis_bound = 32*[1 1 1] + 3.5*[0 0 1]; % bound height, for different conditions
+% decis_bound = [inf inf inf]; % bound height, for different conditions
 
-%  decis_thres = 40*[1 1 1+8/29]; % bound height, for different conditions
+%  decis_bound = 40*[1 1 1+8/29]; % bound height, for different conditions
 
 % Smoothed diff
-% decis_thres = 13*[1 1 1+2/13]; % bound height, for different conditions
+% decis_bound = 13*[1 1 1+2/13]; % bound height, for different conditions
 
 att_gain_stim_after_hit_bound = [0 0 0];
 
@@ -700,7 +700,7 @@ end
 for ss = 1:length(unique_stim_type)
     % === Some slicing stuffs necessary for parfor ===
     att_gain_this(ss) = att_gain_stim_after_hit_bound(unique_stim_type(ss));
-    decis_thres_this(ss) = decis_thres(unique_stim_type(ss));
+    decis_bound_this(ss) = decis_bound(unique_stim_type(ss));
 end
 
 % --- Generate other stuffs that are not ss/hh- dependent ---
@@ -815,11 +815,11 @@ parfor tt = 1:n_parfor_loops % For each trial
         % - Rate termination --
                 %{
         if if_bounded && k*dt > stim_on_time + 0.5 && att_gain_stim == 1 ...
-                ... && (max(decision_ac(:,k+1)) > decis_thres_this)   % Only Max
+                ... && (max(decision_ac(:,k+1)) > decis_bound_this)   % Only Max
                 && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
-                mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
+                mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_bound_this(ss_this)
             ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
-                ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
+                ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_bound_this(ss_this)
                 %}
             % - Time termination (Just for para_scanning other parameters!) -
 %             %{
@@ -897,7 +897,7 @@ save(sprintf('./result/%sweights_saved.mat',save_folder),'weights_saved');
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Moved to AnalysisResult.m %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 disp('Plot results...');
-AnalysisResult;
+AnalyzeResult;
 
 %% Save result
 if nargin == 2 % Save result

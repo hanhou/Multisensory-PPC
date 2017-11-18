@@ -76,6 +76,7 @@ delay_another_for_visual = 0.1; % in s
 
 % ============ Decision bound ============
 if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
+read_out_at_the_RT = 0; % Readout decision at RT instead of at the end of each trial
 % f_bound = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
 
@@ -147,12 +148,14 @@ gain_acc_vest = 2.6; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
 time_const_int = 10000e-3; % in s
 time_const_lip = 100e-3; % in s
 
-% ---- Visual to INTEGRATOR ----
+% ---- Sensory to INTEGRATOR ----
 g_w_int_vest = 10; % Let's vary the gain separately
-g_w_int_vis = 1; 
+g_w_int_vis = 10; 
 dc_w_int_vis = 0;
 k_int_vis = 4; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider
+
+gamma = 1; % Time_varying_weight_factor = reliability ^ gamma;
 
 % ----- Targets to LIP ------
 g_w_lip_targ= 8;
@@ -315,6 +318,7 @@ if use_real_profile
     shift_bins = round(delay_another_for_visual/dt);
     vel = [zeros(1,shift_bins) vel(1:end-shift_bins)];
     
+    
 else  % -- Use the ideal velocity profile ---
     
     vel = exp(-(t_motion-miu).^2/(2*sigma^2));
@@ -326,11 +330,29 @@ else  % -- Use the ideal velocity profile ---
     vel = vel*amp/sum(vel*dt) ; % in m/s. Normalized to distance
 end
 
+
 % To make sure t_motion, vel, and acc have the same length
 t_motion(end) = [];
 vel(end) = [];
 
+% Time-varying synaptic weights (sensory -> INT) in proportion to reliability
+%%
+% gamma = 5; % I put it afterward
+w_int_vest_timevarying_factor = [nan(1,stim_on_time_in_bins) (abs(acc)).^gamma/mean((abs(acc)).^gamma)];
+w_int_vis_timevarying_factor = [nan(1,stim_on_time_in_bins) vel.^gamma/mean(vel.^gamma)];
 
+% Plot time-varying factor
+if if_debug
+    ts = ((0:trial_dur_total_in_bins-1)-stim_on_time_in_bins)*dt; % in s
+    figure(1439);  clf; hold on;
+    plot(ts,w_int_vest_timevarying_factor,'linew',2);
+    plot(ts,w_int_vis_timevarying_factor,'linew',2);
+    plot(xlim,[1 1],'k--');
+    SetFigure(15); ylabel('Time-varying factor'); title(['gamma = ' num2str(gamma)]);
+    xlim([-0.2 1.5]); ylim([0 6])
+end
+
+%%
 if if_debug
     figure(111); clf
     set(gcf,'name','Motion profile','uni','norm','pos',[0.632       0.381       0.358       0.403]);
@@ -779,9 +801,13 @@ parfor tt = 1:n_parfor_loops % For each trial
         %                         );
         
         % Just let the INTEGRATOR to be ideal. (straight sum)
+%         rate_int_this(:,k+1) = rate_int_this(:,k)...   %  Self dynamics.  in Hz!
+%             + att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input 
+%             + att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
+
         rate_int_this(:,k+1) = rate_int_this(:,k)...   %  Self dynamics.  in Hz!
-            + att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input
-            + att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
+            + att_gain_stim * w_int_vis * w_int_vis_timevarying_factor(k) * spikes_vis_this(:,k)...     % Visual input with reliablity-dependent weights HH20171026
+            + att_gain_stim * w_int_vest * w_int_vest_timevarying_factor(k) * spikes_vest_this(:,k);     % Vestibular input with reliablity-dependent weights
         
         
         % -- Update LIP layer --

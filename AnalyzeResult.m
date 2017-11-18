@@ -2,12 +2,12 @@
 analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 
                    0;  % 0p5 Decoding method 
                        % 1 Overview (mandatary)
-                   0;  % 1p5 Overview (normalized)
+                   1;  % 1p5 Overview (normalized)
                    1;  % 2 Example
                    1;  % 3 Cells deltaPSTH
                    1;  % 3p5 Cells rawPSTH
-                   0;  % 4 Heterogeneity
-                   0;  % 5 Linear regression (Gu 2008)
+                   1;  % 4 Heterogeneity
+                   1;  % 5 Linear regression (Gu 2008)
                    ];
 
 %% Get data
@@ -294,10 +294,34 @@ choices_svm_all = reshape(choices_svm_all,N_rep,length(unique_heading),length(un
 % choices = choices_maxpos;
 choices = choices_svm_all;
 
+%% ======= Make choices at different TIME for calculating information ====== HH20171106
+info_ts = 0:0.1:1.5;
+rate_lip_at_info_ts = squeeze(rate_lip(:,round((info_ts + stim_on_time)/dt),:,:,:)); % Or, get the population activity at the end of the trials
+info_choices_svm_all = svmclassify(svm_model,reshape(rate_lip_at_info_ts,N_lip,[])');   % Simply combine them (should do bootstrapping here?)
+info_choices_svm_all = reshape(info_choices_svm_all,length(info_ts),N_rep,length(unique_heading),length(unique_stim_type));  
+
+info = [];
+for ss = 1:length(unique_stim_type)
+    for itt = 1:length(info_ts)
+        
+        psychometric = [unique_heading' sum(reshape(info_choices_svm_all(itt,:,:,ss)==RIGHT,[],length(unique_heading)),1)'/N_rep];
+        xxx = -max(unique_heading):0.1:max(unique_heading);
+        
+        [bias, threshold] = cum_gaussfit_max1(psychometric);
+        info(itt,ss) = 1/threshold^2;
+        
+        % plot(psychometric(:,1),psychometric(:,2),'o','color',colors(unique_stim_type(ss),:),'markerfacecolor',colors(unique_stim_type(ss),:),'markersize',10); % Psychometric
+        % set(text(min(xlim),0.6+0.06*ss,sprintf('%g\n',threshold)),'color',colors(unique_stim_type(ss),:));
+        % plot(xxx,normcdf(xxx,bias,threshold),'-','color',colors(unique_stim_type(ss),:),'linewid',4);
+        %  axis([-8.5 8.5 0 1]);
+        
+    end
+end
+
 % test_svm
 
 %% ====== SVM toy test: Generate uncorrelated population activity to test SVM decoder (after talk 20170609) ======
-
+%{
 rate_lip_toy_to_train = nan(n_train,N_lip);
 rate_lip_toy_to_test = nan(n_test,N_lip);
 aver_population_act = nan(N_lip,length(unique_heading),length(unique_stim_type));
@@ -520,8 +544,11 @@ end
 
 axes(hs(2));
 plot(vel/max(vel)*max(xlim)/3-8,t_motion,'k--','linew',2);
-title(sprintf('RT, correct trials, Bound = %s',num2str(decis_thres)));
-
+if if_bound_RT
+    title(sprintf('RT, correct trials, Bound = %s',num2str(decis_bound)));
+else
+    title(sprintf('Fixed duration'));
+end
 axes(hs(1));
 thres_boot(4,:) = (thres_boot(1,:).^(-2) + thres_boot(2,:).^(-2)).^(-1/2);
 set(bar(4,mean(thres_boot(4,:))),'facecolor','k'); hold on;
@@ -564,6 +591,9 @@ PSTH_correct_mean_headings_norm = nan(N_sample_cell,length(ts),length(unique_sti
 PSTH_correct_mean_allheading = nan(N_sample_cell,length(ts),length(unique_stim_type),2);
 PSTH_correct_mean_allheading_norm = nan(N_sample_cell,length(ts),length(unique_stim_type),2);
 
+% For linear regression
+PSTH_all_mean_headings = nan(N_sample_cell,length(ts),length(unique_stim_type),length(unique_abs_heading),2);
+
 pref_null = [RIGHT LEFT];
 
 % === Calculate cells' dynamic range for normalization HH20170714 ===
@@ -576,7 +606,7 @@ dynamic_min = min(reshape(rate_lip(to_calculate_PSTH_cells_ind,norm_time_range,:
 
 for ss = 1:length(unique_stim_type)
     
-    zu_all{ss} = []; % Cache for VarCE
+%     zu_all{ss} = []; % Cache for VarCE
     
     for cc = 1:2 % Pref and Null
         PSTH_cache = [];
@@ -590,6 +620,9 @@ for ss = 1:length(unique_stim_type)
             % PSTH separated for each heading
             PSTH_correct_raw_this = rate_lip(to_calculate_PSTH_cells_ind,:,this_correct_ind,this_heading_ind,ss);
             PSTH_correct_mean_headings(:,:,ss,abshh,cc) = mean(PSTH_correct_raw_this,3);
+
+            PSTH_all_raw_this = rate_lip(to_calculate_PSTH_cells_ind,:,:,this_heading_ind,ss);            
+            PSTH_all_mean_headings(:,:,ss,abshh,cc) = mean(PSTH_all_raw_this,3); % Note that there's a duplication in zero heading
             
             PSTH_correct_raw_this_norm = bsxfun(@rdivide,bsxfun(@minus,PSTH_correct_raw_this,dynamic_min),(dynamic_max-dynamic_min));
             PSTH_correct_mean_headings_norm(:,:,ss,abshh,cc) = mean(PSTH_correct_raw_this_norm,3);
@@ -599,11 +632,11 @@ for ss = 1:length(unique_stim_type)
             PSTH_cache_norm = cat(3,PSTH_cache_norm,PSTH_correct_raw_this_norm);
 
             % For VarCE: all choice
-            if ~(unique_abs_heading(abshh)==0 && cc==2) % Skip abs(heading) = 0 and cc = 2 because cc = 1 already includes all trials for 0 heading
-                PSTH_all_raw_this_forVarCE = rate_lip(to_calculate_PSTH_cells_ind,:,:,this_heading_ind,ss);
-                zu_this = bsxfun(@minus, PSTH_all_raw_this_forVarCE, mean(PSTH_all_raw_this_forVarCE,3));
-                zu_all{ss} = cat(3,zu_all{ss},zu_this);
-            end
+%             if ~(unique_abs_heading(abshh)==0 && cc==2) % Skip abs(heading) = 0 and cc = 2 because cc = 1 already includes all trials for 0 heading
+%                 PSTH_all_raw_this_forVarCE = rate_lip(to_calculate_PSTH_cells_ind,:,:,this_heading_ind,ss);
+%                 zu_this = bsxfun(@minus, PSTH_all_raw_this_forVarCE, mean(PSTH_all_raw_this_forVarCE,3));
+%                 zu_all{ss} = cat(3,zu_all{ss},zu_this);
+%             end
         end
         
         % PSTH for all headings
@@ -620,11 +653,13 @@ if str2num(v(findstr(v,'R')+1:findstr(v,'R')+4)) >= 2014   % Matlab version issu
     PSTH_correct_mean_allheading(to_flip,:,:,:) = flip(PSTH_correct_mean_allheading(to_flip,:,:,:),4);
     PSTH_correct_mean_headings_norm(to_flip,:,:,:,:) = flip(PSTH_correct_mean_headings_norm(to_flip,:,:,:,:),5);
     PSTH_correct_mean_allheading_norm(to_flip,:,:,:) = flip(PSTH_correct_mean_allheading_norm(to_flip,:,:,:),4);
+    PSTH_all_mean_headings(to_flip,:,:,:,:) = flip(PSTH_all_mean_headings(to_flip,:,:,:,:),5);
 else
     PSTH_correct_mean_headings(to_flip,:,:,:,:) = flipdim(PSTH_correct_mean_headings(to_flip,:,:,:,:),5);
     PSTH_correct_mean_allheading(to_flip,:,:,:) = flipdim(PSTH_correct_mean_allheading(to_flip,:,:,:),4);    
     PSTH_correct_mean_headings_norm(to_flip,:,:,:,:) = flipdim(PSTH_correct_mean_headings_norm(to_flip,:,:,:,:),5);
     PSTH_correct_mean_allheading_norm(to_flip,:,:,:) = flipdim(PSTH_correct_mean_allheading_norm(to_flip,:,:,:),4);    
+    PSTH_all_mean_headings(to_flip,:,:,:,:) = flipdim(PSTH_all_mean_headings(to_flip,:,:,:,:),5);
 end
 
 diff_PSTH_correct_mean_headings = - diff(PSTH_correct_mean_headings,[],5);
@@ -687,21 +722,27 @@ end
 % ======= Delta-PSTH, all heading, correct only =====
 axes(hs(12)); hold on;    title('All headings');
 
-mean_diff_PSTH_correct_allheading = nan(length(ts),length(unique_stim_type)); % Save for fitting real data. HH20170808
+mean_diff_PSTH_correct_allheading = mean(diff_PSTH_correct_mean_allheading,1); % Save for fitting real data. HH20170808
 
-for ss = 1:length(unique_stim_type)
-    mean_diff_PSTH_correct_allheading(:,ss) = mean(diff_PSTH_correct_mean_allheading(:,:,ss),1);
-    plot(ts,mean_diff_PSTH_correct_allheading(:,ss),'color',colors(unique_stim_type(ss),:),'linew',2.5);
-    
-%     errorbar(ts,mean(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),1),...
-%         std(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),[],1)/sqrt(length(to_plot_grouped_PSTH)),'color',colors(unique_stim_type(ss),:),'linew',2.5);
-end
+yyy = reshape(diff_PSTH_correct_mean_allheading(:,:,:),N_sample_cell,length(ts),[]);
+h = SeriesComparison(yyy,ts,...
+    'Colors',colors,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
+    'ErrorBar',2,'Xlabel',[],'axes',hs(12));
+legend off;
+plot(hs(12),t_motion,vel/max(vel)*max(ylim)/5,'k--'); axis tight;
+title(hs(12),'raw');
+
+% for ss = 1:length(unique_stim_type)
+%     mean_diff_PSTH_correct_allheading(:,ss) = mean(diff_PSTH_correct_mean_allheading(:,:,ss),1);
+%     plot(ts,mean_diff_PSTH_correct_allheading(:,ss),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+%     
+% %     errorbar(ts,mean(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),1),...
+% %         std(diff_PSTH_correct_mean_allheading(to_plot_grouped_PSTH,:,ss),[],1)/sqrt(length(to_plot_grouped_PSTH)),'color',colors(unique_stim_type(ss),:),'linew',2.5);
+% end
 
 if length(unique_stim_type) == 3
     plot(ts,mean(sum(diff_PSTH_correct_mean_allheading(:,:,[1 2]),3),1),'k--');
 end
-
-plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
 
 axis tight;
 y_min = min(y_min,min(ylim));
@@ -709,21 +750,30 @@ y_max = max(y_max,max(ylim));
 
 set(hs(7:12),'ylim',[y_min y_max]);
 
-% ====== VarCE ======
-axes(hs(3)); hold on; title('VarCE');
+% % ====== VarCE ======
 
+% Info (1/variance^2)
+axes(hs(3)); hold on; 
+info(info>=90)=0; % Some weird values due to bad fitting
 for ss = 1:length(unique_stim_type)
-    plot(ts,mean(var(zu_all{ss}(:,:,:)*0.06,[],3),1),...  % 60 ms spike counting window in Ann's paper
-        'color',colors(unique_stim_type(ss),:),'linew',2.5);
+    plot(info_ts,info(:,ss),'o-','color',colors(unique_stim_type(ss),:),'markerfacecolor',colors(unique_stim_type(ss),:));
 end
-plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
-xlim([min(ts),max(ts)]);
+
+plot(info_ts,sum(info(:,[1 2]),2),'k--');
+
+% title('VarCE');
+% for ss = 1:length(unique_stim_type)
+%     plot(ts,mean(var(zu_all{ss}(:,:,:)*0.06,[],3),1),...  % 60 ms spike counting window in Ann's paper
+%         'color',colors(unique_stim_type(ss),:),'linew',2.5);
+% end
+% plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+% xlim([min(ts),max(ts)]);
 
 
 if ION_cluster
     export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s1_Overview%s.png',save_folder,para_override_txt));
     saveas(gcf,sprintf('./result/%s1_Overview%s.fig',save_folder,para_override_txt),'fig');
-    h_grouped = [h_grouped hs(1) hpsy hs(6) hs(12)]; % Add h_grouped
+    h_grouped = [h_grouped hs(1) hpsy hs(6) hs(12) hs(3)]; % Add h_grouped
 end
 disp('Overview done');
 
@@ -886,9 +936,9 @@ if analysis_switch(4)
                     else
                         plot(ts,rate_int(round(to_plot_cell_ind/N_lip*N_int),:,this_correct_ind(tt),this_heading_ind,ss),'k--','linewid',1); hold on;
                     end
-                    %     if if_bounded
-                    %         plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
-                    % %         ylim([min(ylim),decis_thres*1.1]);
+                    %     if if_bound_RT
+                    %         plot(xlim,[decis_bound(unique_stim_type(ss)) decis_bound(unique_stim_type(ss))],'c--');
+                    % %         ylim([min(ylim),decis_bound*1.1]);
                     %     end
                     
                 end
@@ -898,9 +948,9 @@ if analysis_switch(4)
             title(sprintf('rate\\_lip, pref = %g, |heading| = %g',prefs_lip(to_plot_cell_ind), to_plot_abs_headings(tph)));
             plot(t_motion,vel/max(vel)*max(ylim)/3,'k--');
             axis tight;
-            if if_bounded
-                plot(xlim,[decis_thres(unique_stim_type(ss)) decis_thres(unique_stim_type(ss))],'c--');
-                %         ylim([min(ylim),decis_thres(k)*1.1]);
+            if if_bound_RT
+                plot(xlim,[decis_bound(unique_stim_type(ss)) decis_bound(unique_stim_type(ss))],'c--');
+                %         ylim([min(ylim),decis_bound(k)*1.1]);
             end
             
             axes(hs(6*(tph-1)+ss+3));
@@ -1125,11 +1175,12 @@ if analysis_switch(7)
             file_name = sprintf('./result/%s4_Heterogeneity%s',save_folder,para_override_txt);
             export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
             saveas(gcf,[file_name '.fig'],'fig');
-            h_grouped = [h_grouped hs(1:6)']; % Add h_grouped
+            h_grouped = [h_grouped hs(1)]; % Add h_grouped
         end
         
     end
 end
+
 %% ===== Fig.5 Linear regression of Rcomb = Wvest * Rvest + Wvis * Rvis
 if analysis_switch(8)
     
@@ -1160,17 +1211,24 @@ if analysis_switch(8)
             r = [];
             for k = 1:3
                 r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
+%                 r(:,k) = mean(reshape(squeeze(PSTH_all_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
             end
             
-            r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
             
             % if tcc == 17    keyboard; end
             
             % GLM fit
+%             [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','on');
+%             [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
+%             
+%             weight_vest_vis(i,:,tcc) = [b(2:3)' stat.p(2:3)' stat_reg([1 3])]; % Weights, r^2 and p-value
+
+            r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
             [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
             [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
             
             weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
+
             
             % yfit = r(:,1:2) * b;
             % measure_pred_all((i-1)*10 + 1:(i-1)*10+size(r,1),:,tcc) = [r(:,3) yfit];
@@ -1184,7 +1242,7 @@ if analysis_switch(8)
     
     figure(7252243);
     set(gcf,'uni','norm','pos',[0.005       0.057       0.958       0.822]);clf; hold on;
-    subplot(2,4,[1]);
+    subplot(2,5,[1]);
     mean_paras = squeeze(mean(weight_vest_vis(:,[1 2 end-1],:),1))';
     sem_paras = squeeze(std(weight_vest_vis(:,[1 2 end-1],:)))'/sqrt(size(weight_vest_vis,1));
     
@@ -1207,8 +1265,8 @@ if analysis_switch(8)
     
     %% ======  Part I: Large window, R^2 and weight. Figure 5 of Gu 2008  =====
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    toi = [0.95 1.3] ;   % Time of interests for weights illustration
-    t_span_large = 1;
+    toi = [1.1 1.3] ;   % Time of interests for weights illustration
+    t_span_large = 0.2;
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     t_centers = toi;
     
@@ -1217,6 +1275,8 @@ if analysis_switch(8)
     
     weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
     measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
+
+%     weight_vest_vis_lsqlin = nan(length(to_plot_linear),2,length(t_centers));
     
     for i = 1:length(to_plot_linear)  % For each cell
         
@@ -1227,17 +1287,26 @@ if analysis_switch(8)
             r = [];
             for k = 1:3
                 r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
+%                 r(:,k) = mean(reshape(squeeze(PSTH_all_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
             end
             
-            r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
             
             % if tcc == 17    keyboard; end
             
             % GLM fit
-            [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
+            [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','on');
+            b = b(2:3); stat.p = stat.p(2:3);            
+
+%             r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
+%             [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
+
             [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
-            
             weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
+            
+%             b_lsqlin = lsqlin([r(:,1:2)],r(:,3),[],[],[],[],[0 0]');
+%             lin = lsqlin([ones(size(r(:,1))) r(:,1:2)],r(:,3),[],[],[],[],[0 0 0]'); b_lsqlin = b_lsqlin(2:3);
+            
+%             weight_vest_vis_lsqlin(i,:,tcc) = b_lsqlin;
             
             yfit = r(:,1:2) * b;
             measure_pred_all((i-1)*10 + 1:(i-1)*10+size(r,1),:,tcc) = [r(:,3) yfit];
@@ -1276,7 +1345,7 @@ if analysis_switch(8)
         title(sprintf('t_{center} = %g (%g s window)',t_centers(toi_ind),t_span_large));
         
         % Vestibular / visual weights
-        ax2 = subplot(2,4,4 + (toii-1)*4);
+        ax2(toii) = subplot(2,4,4 + (toii-1)*4);
         %    plot(weight_vest_vis(:,1,toi_ind),weight_vest_vis(:,2,toi_ind),'o');
         
         %     h = LinearCorrelation({
@@ -1310,10 +1379,19 @@ if analysis_switch(8)
         axis([xlims_new xlims_new]);
         h.diag = plot([xlims_new(1) xlims_new(2)],[xlims_new(1) xlims_new(2)],'k:');
         
+        % Annotate significant regressions
+        sig_ind = weight_vest_vis(:,end,toi_ind)<0.05;
+        plot(weight_vest_vis(sig_ind,1,toi_ind),weight_vest_vis(sig_ind,2,toi_ind),'o','markersize',7,'markerfacecolor','k');
+        
         if toii == 1 ; xlabel(''); end
         plot(xlim,[0 0],'k--'); plot([0 0],ylim,'k--'); plot(xlim,[1 1],'k--'); plot([1 1],ylim,'k--');
         legend off;
         set(gca,'xtick',-10:1:10,'ytick',-10:1:10);
+        
+%         ax3(toii) = subplot(2,5,5 + (toii-1)*5);
+%         plot(ax3(toii),weight_vest_vis_lsqlin(:,1,toi_ind),weight_vest_vis_lsqlin(:,2,toi_ind),'o'); hold on
+%         plot(xlim,[0 0],'k--'); plot([0 0],ylim,'k--'); plot(xlim,[1 1],'k--'); plot([1 1],ylim,'k--');
+%         set(gca,'xtick',-10:1:10,'ytick',-10:1:10);
         
     end
     
@@ -1321,7 +1399,7 @@ if analysis_switch(8)
         file_name = sprintf('./result/%s5_LinearRegression%s',save_folder,para_override_txt);
         export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
         saveas(gcf,[file_name '.fig'],'fig');
-        % h_grouped = [h_grouped hs(1:6)']; % Add h_grouped
+        h_grouped = [h_grouped ax2(1)]; % Add h_grouped
     end
 end
 

@@ -75,22 +75,19 @@ delay_for_all = 0.15; % in s
 delay_another_for_visual = 0.1; % in s
 
 % ============ Decision bound ============
-if_bound_RT = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version); otherwise, use fixed_RT below
-read_out_at_the_RT = 0; % Readout decision at RT instead of at the end of each trial
-% d = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
+if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
+read_out_at_the_RT = 1; % Readout decision at RT instead of at the end of each trial
+% f_bound = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
 
 % Smoothed max
-decis_bound = 37*[1 1 1] + [0 0 5]; % bound height, for different conditions
-% decis_bound = [inf inf inf]; % bound height, for different conditions
+decis_thres = 32*[1 1 1] + 3.5*[0 0 1]; % bound height, for different conditions
+% decis_thres = [inf inf inf]; % bound height, for different conditions
 
-%  decis_bound = 40*[1 1 1+8/29]; % bound height, for different conditions
+%  decis_thres = 40*[1 1 1+8/29]; % bound height, for different conditions
 
 % Smoothed diff
-% decis_bound = 13*[1 1 1+2/13]; % bound height, for different conditions
-
-% ============ if if_bound_RT = 0, use the fixed_RTs ======
-fixed_RT = [1.5 1.5 1.5]; % Seconds after stim on
+% decis_thres = 13*[1 1 1+2/13]; % bound height, for different conditions
 
 att_gain_stim_after_hit_bound = [0 0 0];
 
@@ -113,7 +110,7 @@ num_of_sigma = 3.5; amp = 0.2;
 
 % Parameters roughly follow the Yong Gu's MST data.
 % Visual
-coherence = 10;
+coherence = 12;
 r_spont_vis = 10;
 b_pref_vis = 1.7;
 b_null_vis = -0.2;
@@ -151,14 +148,12 @@ gain_acc_vest = 2.6; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
 time_const_int = 10000e-3; % in s
 time_const_lip = 100e-3; % in s
 
-% ---- Sensory to INTEGRATOR ----
-g_w_int_vest = 20; % Let's vary the gain separately
-g_w_int_vis = 20; 
+% ---- Visual to INTEGRATOR ----
+g_w_int_vest = 10; % Let's vary the gain separately
+g_w_int_vis = 10; 
 dc_w_int_vis = 0;
 k_int_vis = 4; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider
-
-gamma = 0; % Time_varying_weight_factor = reliability ^ gamma; when gamma = 0, weights are constant over time
 
 % ----- Targets to LIP ------
 g_w_lip_targ= 8;
@@ -200,7 +195,7 @@ threshold_lip = 0.0;
 save_folder = '';
 
 % ==== Heterogeneity ====
-heter_enable = 1; % Master switch of heterogeneity
+heter_enable = 0; % Master switch of heterogeneity
 
 % --- "POST": Add heterogeneity in post synaptic parameters ---
 % Variability in:    g       k     dc                   
@@ -215,7 +210,7 @@ heter_post (:) = 0;
 heter_normal = heter_enable * 0 * [1 1 1 1];  % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "Dropout": Increase sparseness in the weight matrix ---
-heter_dropout = heter_enable * 0.3 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+heter_dropout = heter_enable * 0.6 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "LogNormal": log normal distribution for each group of weights (diagonal) ---
 heter_lognormal  = heter_enable * 1 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
@@ -319,8 +314,7 @@ if use_real_profile
     
     % Shift vel with visual delay
     shift_bins = round(delay_another_for_visual/dt);
-    vel_vis = [zeros(1,shift_bins) vel(1:end-shift_bins)];
-    
+    vel = [zeros(1,shift_bins) vel(1:end-shift_bins)];
     
 else  % -- Use the ideal velocity profile ---
     
@@ -329,47 +323,27 @@ else  % -- Use the ideal velocity profile ---
     acc = diff(vel)/dt; % in m/s^2
     
     % Shift vel with visual delay
-    vel_vis = exp(-(t_motion-miu-delay_another_for_visual).^2/(2*sigma^2)); % -- Use the ideal velocity profile ---
-    vel_vis = vel_vis*amp/sum(vel_vis*dt) ; % in m/s. Normalized to distance
+    vel = exp(-(t_motion-miu-delay_another_for_visual).^2/(2*sigma^2)); % -- Use the ideal velocity profile ---
+    vel = vel*amp/sum(vel*dt) ; % in m/s. Normalized to distance
 end
-
 
 % To make sure t_motion, vel, and acc have the same length
 t_motion(end) = [];
-vel_vis(end) = [];
 vel(end) = [];
 
-% Time-varying synaptic weights (sensory -> INT) in proportion to reliability
-%%
-% gamma = 5; % I put it earlier
-w_int_vest_timevarying_factor = [zeros(1,stim_on_time_in_bins) (abs(acc)).^gamma/max((abs(acc)).^gamma)];
-w_int_vis_timevarying_factor = [zeros(1,stim_on_time_in_bins) vel_vis.^gamma/max(vel_vis.^gamma)];
 
-% Plot time-varying factor
-if if_debug
-    ts = ((0:trial_dur_total_in_bins-1)-stim_on_time_in_bins)*dt; % in s
-    figure(1439);  clf; hold on;
-    plot(ts,w_int_vest_timevarying_factor,'linew',2);
-    plot(ts,w_int_vis_timevarying_factor,'linew',2);
-    plot(xlim,[1 1],'k--');
-    SetFigure(15); ylabel('Time-varying factor'); title(['gamma = ' num2str(gamma)]);
-    xlim([0 1.5]); ylim([0 1.1])
-end
-
-%%
 if if_debug
     figure(111); clf
     set(gcf,'name','Motion profile','uni','norm','pos',[0.632       0.381       0.358       0.403]);
-    h = plotyy(t_motion,acc,t_motion,vel_vis);
+    h = plotyy(t_motion,acc,t_motion,vel);
     ylabel(h(2),'Velocity (m/s)');
     ylabel(h(1),'Acceleration (m^2/s)');
-   	keyboard;
 end
 
 %%%%%%%%%%% Pack all paras %%%%%%%%%%%
 para_list = who;
 for i = 1:length(para_list)
-    paras.(para_list{i}) = eval(para_list{i});
+        paras.(para_list{i}) = eval(para_list{i});
 end
 
 
@@ -542,7 +516,7 @@ else
         eval(sprintf('w_%s = sign(w_%s) .* exp( miu + randn(size(w_%s)) .* sigma );',ws{ww},ws{ww},ws{ww}));
         
         % ==== Heterogeneity Method 5: Dropout while keep the mean unchanged ====
-        % w_int_vest(rand(size(w_int_vest))<(1)) = 0;
+        % w_int_vest(rand(size(w_int_vest))<heter_dropout(1)) = 0;
         eval(sprintf('w_%s(rand(size(w_%s)) < heter_dropout(%g)) = 0;',ws{ww},ws{ww},ww));
         % Scale to keep the mean unchanged
         eval(sprintf('w_%s = w_%s / (1-heter_dropout(%g));',ws{ww},ws{ww},ww));
@@ -587,25 +561,6 @@ else
     %%
     w_int_vest = w_old_int_vest + vest_correlated;
     w_int_vis = w_old_int_vis + vis_correlated;
-    
-    %% Make the average of the weight matrix symmetric for heter
-    if heter_enable
-        temp = mat2cell(w_int_vest,size(w_int_vest,1)/2*[1 1],size(w_int_vest,2)/2*[1 1]);
-        aver_temp = cellfun(@mean,cellfun(@mean,temp,'UniformOutput',false));
-        temp{1} = temp{1}/aver_temp(1) * mean(aver_temp([1 4]));
-        temp{4} = temp{4}/aver_temp(4) * mean(aver_temp([1 4]));
-        temp{2} = temp{2}/aver_temp(2) * mean(aver_temp([2 3]));
-        temp{3} = temp{3}/aver_temp(3) * mean(aver_temp([2 3]));
-        w_int_vest = cell2mat(temp);
-        
-        temp = mat2cell(w_int_vis,size(w_int_vis,1)/2*[1 1],size(w_int_vis,2)/2*[1 1]);
-        aver_temp = cellfun(@mean,cellfun(@mean,temp,'UniformOutput',false));
-        temp{1} = temp{1}/aver_temp(1) * mean(aver_temp([1 4]));
-        temp{4} = temp{4}/aver_temp(4) * mean(aver_temp([1 4]));
-        temp{2} = temp{2}/aver_temp(2) * mean(aver_temp([2 3]));
-        temp{3} = temp{3}/aver_temp(3) * mean(aver_temp([2 3]));
-        w_int_vis = cell2mat(temp);
-    end
     
     % Return immediately for debugging
     % if nargin == 2 % Save result
@@ -747,7 +702,7 @@ end
 for ss = 1:length(unique_stim_type)
     % === Some slicing stuffs necessary for parfor ===
     att_gain_this(ss) = att_gain_stim_after_hit_bound(unique_stim_type(ss));
-    decis_bound_this(ss) = decis_bound(unique_stim_type(ss));
+    decis_thres_this(ss) = decis_thres(unique_stim_type(ss));
 end
 
 % --- Generate other stuffs that are not ss/hh- dependent ---
@@ -779,15 +734,15 @@ parfor tt = 1:n_parfor_loops % For each trial
     spikes_target_this = rand(N_lip,trial_dur_total_in_bins)<(aux_proba_target);
     
     % -- Visual input spike train --
-    aux_proba_vis = proba_vis_for_each_heading(:,hh_this)*[zeros(1,stim_on_time_in_bins) vel_vis*gain_vel_vis]...
+    aux_proba_vis = proba_vis_for_each_heading(:,hh_this)*[zeros(1,stim_on_time_in_bins) vel*gain_vel_vis]...
         + w_cov_vis*randn(N_vis,trial_dur_total_in_bins) ...
-        .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel_vis))],N_vis,1);
+        .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel))],N_vis,1);
     
     % -- Vestibular ---
     % With the temporal gain of abs(acc)
     aux_proba_vest = proba_vest_for_each_heading(:,hh_this)*[zeros(1,stim_on_time_in_bins) abs(acc)*gain_acc_vest]...
         + w_cov_vest*randn(N_vest,trial_dur_total_in_bins) ...
-        .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel_vis))],N_vis,1);
+        .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel))],N_vis,1);
     
     % -- Stimulus condition selection --
     if unique_stim_type(ss_this) == 1
@@ -825,13 +780,9 @@ parfor tt = 1:n_parfor_loops % For each trial
         %                         );
         
         % Just let the INTEGRATOR to be ideal. (straight sum)
-%         rate_int_this(:,k+1) = rate_int_this(:,k)...   %  Self dynamics.  in Hz!
-%             + att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input 
-%             + att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
-
         rate_int_this(:,k+1) = rate_int_this(:,k)...   %  Self dynamics.  in Hz!
-            + att_gain_stim * w_int_vis * w_int_vis_timevarying_factor(k) * spikes_vis_this(:,k)...     % Visual input with reliablity-dependent weights HH20171026
-            + att_gain_stim * w_int_vest * w_int_vest_timevarying_factor(k) * spikes_vest_this(:,k);     % Vestibular input with reliablity-dependent weights
+            + att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input
+            + att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
         
         
         % -- Update LIP layer --
@@ -860,30 +811,26 @@ parfor tt = 1:n_parfor_loops % For each trial
         %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out(:,k));
         
         % -- Termination --
-        
-        if if_bound_RT        % - Rate termination --
-            if att_gain_stim == 1 && k*dt > stim_on_time + 0.5  ...
-                    ... && (max(decision_ac(:,k+1)) > decis_bound_this)   % Only Max
-                    && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
-                    mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_bound_this(ss_this)
-                ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
-                    ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_bound_this(ss_this)
-                    %}
-                % Set the attention for motion stimuli to zero
-                att_gain_stim = att_gain_this(ss_this);
-                RT(tt) = (k-stim_on_time_in_bins)*dt;
-                % last_proba(:,count) = rate_int(:,k,tt,hh,ss);
-            end
-        else    % - Time termination (Just for para_scanning other parameters!) -
-            if att_gain_stim == 1 && ...
-                    ((unique_stim_type(ss_this)==1 && k*dt > stim_on_time + fixed_RT(1))...
-                    ||(unique_stim_type(ss_this)==2 && k*dt > stim_on_time + fixed_RT(2))...
-                    ||(unique_stim_type(ss_this)==3 && k*dt > stim_on_time + fixed_RT(3)))
-                % Set the attention for motion stimuli to zero
-                att_gain_stim = att_gain_this(ss_this);
-                RT(tt) = (k-stim_on_time_in_bins)*dt;
-                % last_proba(:,count) = rate_int(:,k,tt,hh,ss);
-            end
+        % - Rate termination --
+%                 %{
+        if if_bounded && k*dt > stim_on_time + 0.5 && att_gain_stim == 1 ...
+                ... && (max(decision_ac(:,k+1)) > decis_thres_this)   % Only Max
+                && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
+                mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
+            ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
+                ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_thres_this(ss_this)
+                %}
+            % - Time termination (Just for para_scanning other parameters!) -
+            %{
+        if if_bounded && att_gain_stim == 1 && ...
+                 ((unique_stim_type(ss_this)==1 && k*dt > stim_on_time + 0.75)...
+                ||(unique_stim_type(ss_this)==2 && k*dt > stim_on_time + 1.00)...
+                ||(unique_stim_type(ss_this)==3 && k*dt > stim_on_time + 0.8))
+            %}
+            % Set the attention for motion stimuli to zero
+            att_gain_stim = att_gain_this(ss_this);
+            RT(tt) = (k-stim_on_time_in_bins)*dt;
+            % last_proba(:,count) = rate_int(:,k,tt,hh,ss);
         end
         %                     end
         
@@ -943,22 +890,22 @@ weights_saved.w_int_int = w_int_int;
 weights_saved.w_lip_int = w_lip_int;
 weights_saved.w_lip_lip = w_lip_lip;
 weights_saved.w_lip_targ = w_lip_targ;
+save(sprintf('./result/%sweights_saved.mat',save_folder),'weights_saved');
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Moved to AnalysisResult.m %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 disp('Plot results...');
-AnalyzeResult;
+AnalysisResult;
 
 %% Save result
 if nargin == 2 % Save result
     for rr = 1:length(output_result)
         eval(['result.(output_result{rr}) =' output_result{rr}]);
     end
+else
+    result =[];
 end
-
-save(sprintf('./result/%sresults.mat',save_folder),'weights_saved','paras','result');
-
 end
 
 function plot_weight(~,~,x,y,w)
