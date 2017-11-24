@@ -1,14 +1,29 @@
 %% Analysis switch
+if ION_cluster
 analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 
                    0;  % 0p5 Decoding method 
                        % 1 Overview (mandatary)
-                   1;  % 1p5 Overview (normalized)
-                   1;  % 2 Example
-                   1;  % 3 Cells deltaPSTH
-                   1;  % 3p5 Cells rawPSTH
-                   1;  % 4 Heterogeneity
-                   1;  % 5 Linear regression (Gu 2008)
+                   0;  % 1p5 Overview (normalized)
+                   0;  % 2 Example
+                   0;  % 3 Cells deltaPSTH
+                   0;  % 3p5 Cells rawPSTH
+                   0;  % 4 Heterogeneity
+                   0;  % 5 Linear regression (Gu 2008)
+                   1;  % 6 Information in sensory areas
                    ];
+else
+analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 
+                   0;  % 0p5 Decoding method 
+                       % 1 Overview (mandatary)
+                   0;  % 1p5 Overview (normalized)
+                   0;  % 2 Example
+                   0;  % 3 Cells deltaPSTH
+                   0;  % 3p5 Cells rawPSTH
+                   0;  % 4 Heterogeneity
+                   0;  % 5 Linear regression (Gu 2008)
+                   1;  % 6 Information in sensory areas
+                   ];
+end
 
 %% Get data
 % if ~exist('RT','var')  % Used in offline analysis
@@ -45,6 +60,8 @@ end
 % 1. The mean of which is equal to the mean firing rate calculated from the real spike train.
 % 2. The variance of which corresponds to VarCE of the real spike trains, without the need to get rid of the Poisson variability
 rate_lip(rate_lip<0) = 0;
+rate_vest(rate_vest<0) = 0;
+rate_vis(rate_vis<0) = 0;
 
 %% == Actual shifting window spike count for LIP as in experimental data (~ rectified rate_lip etc.) ===
 % I don't use this. See above.
@@ -308,7 +325,7 @@ for ss = 1:length(unique_stim_type)
         xxx = -max(unique_heading):0.1:max(unique_heading);
         
         [bias, threshold] = cum_gaussfit_max1(psychometric);
-        info(itt,ss) = 1/threshold^2;
+        info(itt,ss) = 2 * 1/threshold^2; % Fisher info = (d'/ds)^2 = (ds/sigma_r/ds)^2 = (1/sigma_r)^2 = (sqrt(2)/sigma_psycho)^2 = 2/threshold^2.
         
         % plot(psychometric(:,1),psychometric(:,2),'o','color',colors(unique_stim_type(ss),:),'markerfacecolor',colors(unique_stim_type(ss),:),'markersize',10); % Psychometric
         % set(text(min(xlim),0.6+0.06*ss,sprintf('%g\n',threshold)),'color',colors(unique_stim_type(ss),:));
@@ -725,9 +742,13 @@ axes(hs(12)); hold on;    title('All headings');
 mean_diff_PSTH_correct_allheading = mean(diff_PSTH_correct_mean_allheading,1); % Save for fitting real data. HH20170808
 
 yyy = reshape(diff_PSTH_correct_mean_allheading(:,:,:),N_sample_cell,length(ts),[]);
+try
 h = SeriesComparison(yyy,ts,...
     'Colors',colors,'LineStyles',[repmat({'-'},1,length(unique_abs_heading)) repmat({'--'},1,length(unique_abs_heading))],...
     'ErrorBar',2,'Xlabel',[],'axes',hs(12));
+catch
+    keyboard
+end
 legend off;
 plot(hs(12),t_motion,vel/max(vel)*max(ylim)/5,'k--'); axis tight;
 title(hs(12),'raw');
@@ -1210,8 +1231,14 @@ if analysis_switch(8)
             
             r = [];
             for k = 1:3
-                r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
+                
+                % Use the raw spike count including correct AND incorrect trials. HH20171121
+                r(:,k) = squeeze(mean(sum(spikes_lip(to_calculate_PSTH_cells_ind(to_plot_linear(i)),t_range,:,:,k),2),3));
+                
+                % Use correct only firing rate
+                % r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
 %                 r(:,k) = mean(reshape(squeeze(PSTH_all_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
+
             end
             
             
@@ -1263,9 +1290,9 @@ if analysis_switch(8)
     % Gaussian vel
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
     
-    %% ======  Part I: Large window, R^2 and weight. Figure 5 of Gu 2008  =====
+    %% ======  Part II: Large window, R^2 and weight. Figure 5 of Gu 2008  =====
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    toi = [1.1 1.3] ;   % Time of interests for weights illustration
+    toi = [1 1.4] ;   % Time of interests for weights illustration
     t_span_large = 0.2;
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     t_centers = toi;
@@ -1274,6 +1301,7 @@ if analysis_switch(8)
     % PSTH_correct_mean_headings = [cell_for_regression time stim_type abs_heading choice];
     
     weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
+    linear_regression_ws = nan(length(to_plot_linear),2,length(t_centers));
     measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
 
 %     weight_vest_vis_lsqlin = nan(length(to_plot_linear),2,length(t_centers));
@@ -1286,7 +1314,12 @@ if analysis_switch(8)
             
             r = [];
             for k = 1:3
-                r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
+                
+                % Use the raw spike count including correct AND incorrect trials. HH20171121
+                r(:,k) = squeeze(mean(sum(spikes_lip(to_calculate_PSTH_cells_ind(to_plot_linear(i)),t_range,:,:,k),2),3));
+                
+                % Use correct only firing rate
+                % r(:,k) = mean(reshape(squeeze(PSTH_correct_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
 %                 r(:,k) = mean(reshape(squeeze(PSTH_all_mean_headings(to_plot_linear(i),t_range,k,:,:)),sum(t_range),[]),1);
             end
             
@@ -1294,12 +1327,15 @@ if analysis_switch(8)
             % if tcc == 17    keyboard; end
             
             % GLM fit
-            [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','on');
-            b = b(2:3); stat.p = stat.p(2:3);            
 
-%             r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
-%             [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
+%             [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','on');
+%             b = b(2:3);   stat.p = stat.p(2:3);            
+            
+            r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
+            [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
 
+            linear_regression_ws(i,:,tcc) = r(:,1:2)\r(:,3);  % The same result for sure.
+    
             [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
             weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
             
@@ -1401,6 +1437,99 @@ if analysis_switch(8)
         saveas(gcf,[file_name '.fig'],'fig');
         h_grouped = [h_grouped ax2(1)]; % Add h_grouped
     end
+end
+
+%% Information of sensory areas
+if analysis_switch(9)
+    
+    % --------------- Get spike counts (in Hz) -----------------
+    info_win_wid = 100e-3; % in s
+    info_win_step = 100e-3; 
+    n_info_win = round((trial_dur_total-info_win_wid)/info_win_step)+1;
+    
+    spikecount_dt_lip = nan(N_lip,n_info_win,N_rep,length(unique_heading),length(unique_stim_type));
+    spikecount_t_vest = nan(N_vest,n_info_win,N_rep,length(unique_heading),length(unique_stim_type));
+    spikecount_t_vis = nan(N_vis,n_info_win,N_rep,length(unique_heading),length(unique_stim_type));
+    info_ts = nan(1,n_info_win);
+    
+    for tt = 1:n_info_win
+        this_win_beg = (tt-1)*info_win_step + ts(1);
+        this_win_end = this_win_beg + info_win_wid;
+        info_ts(tt) =  mean([this_win_beg this_win_end]);
+        
+        % Info in [t,t+dt] of LIP
+        spikecount_dt_lip(:,tt,:,:,:) = sum(spikes_lip(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2);
+        
+        % Try rate instead (mean firing rate over dt)
+%         spikecount_dt_lip(:,tt,:,:,:) = sum(rate_lip(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2);
+        
+        % Info in [0,t+dt] of vest/vis
+        spikecount_t_vest(:,tt,:,:,:) = sum(spikes_vest(:,0 <= ts & ts < this_win_end,:,:,:),2); 
+        spikecount_t_vis(:,tt,:,:,:) = sum(spikes_vis(:,0 <= ts & ts < this_win_end,:,:,:),2);
+       
+        % Try rate instead (mean firing rate over 0->t)
+%         spikecount_t_vest(:,tt,:,:,:) = sum(rate_vest(:,0 <= ts & ts < this_win_end,:,:,:),2); 
+%         spikecount_t_vis(:,tt,:,:,:) = sum(rate_vis(:,0 <= ts & ts < this_win_end,:,:,:),2);
+    end
+    
+    train_ratio = 0.5;
+    
+    infos_dt_lip = zeros(n_info_win,3);
+    infos_t_vest = zeros(n_info_win,3);
+    infos_t_vis = zeros(n_info_win,3);
+    
+    disp('Calculate information...')
+    headings = reshape(repmat(unique_heading,N_rep,1),[],1);
+
+    % ------------ Train the decoder once using the most informative (the last one) spike counts -----------------
+    [~,svm_model_lip_count] = fisher_HH(reshape(spikecount_dt_lip(:,end,:,:,3),N_lip,[])',headings,train_ratio);
+    [~,svm_model_vest_count] = fisher_HH(reshape(spikecount_t_vest(:,end,:,:,3),N_vest,[])',headings,train_ratio);
+    [~,svm_model_vis_count] = fisher_HH(reshape(spikecount_t_vis(:,end,:,:,3),N_vis,[])',headings,train_ratio);
+    
+    % ------------ Info in each small window --------------
+    parfor tt = 1:n_info_win
+        for kk = 1:3
+            
+            activities = reshape(spikecount_dt_lip(:,tt,:,:,kk),N_lip,[])';
+            infos_dt_lip(tt,kk) = fisher_HH(activities,headings,train_ratio,svm_model_lip_count);
+            
+            if kk ~= 2
+                activities = reshape(spikecount_t_vest(:,tt,:,:,kk),N_vest,[])';
+                infos_t_vest(tt,kk) = fisher_HH(activities,headings,train_ratio,svm_model_vest_count);
+            end
+            
+            if kk ~= 1
+                activities = reshape(spikecount_t_vis(:,tt,:,:,kk),N_vis,[])';
+                infos_t_vis(tt,kk) = fisher_HH(activities,headings,train_ratio,svm_model_vis_count);
+            end
+        end
+    end
+    
+    disp('Calculate information... Done')
+    
+    figure(1446);   clf;
+    set(gcf,'uni','norm','pos',[0.125       0.436        0.78       0.345]);
+    subplot(1,3,1); title('vest');
+    plot(info_ts,infos_dt_lip(:,1),'bo-', info_ts, infos_t_vest(:,1),'b--'); hold on
+    
+    subplot(1,3,2); title('vis');
+    plot(info_ts,infos_dt_lip(:,2),'ro-', info_ts, infos_t_vis(:,2),'r--'); hold on
+
+    subplot(1,3,3); title('vis');
+    plot(info_ts,infos_dt_lip(:,3),'go-', info_ts, infos_t_vest(:,3),'b--', ...
+            info_ts, infos_t_vis(:,3),'r--', ...
+            info_ts, infos_t_vis(:,3) + infos_t_vest(:,3),'k--',...
+            info_ts, infos_dt_lip(:,1) + infos_dt_lip(:,2),'k-'); hold on
+   
+    linkaxes(findobj(gcf,'type','axes'),'xy');
+    
+    if ION_cluster
+        file_name = sprintf('./result/%s6_Info%s',save_folder,para_override_txt);
+        export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+        saveas(gcf,[file_name '.fig'],'fig');
+        h_grouped = [h_grouped]; % Add h_grouped
+    end
+  
 end
 
 %%

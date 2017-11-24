@@ -10,6 +10,8 @@ function result = lip_HH(para_override,output_result)
 %clear
 %clear global
 
+warning off stats:obsolete:ReplaceThisWith;
+
 if(~isdeployed)
     cd(fileparts(which(mfilename)));
 end
@@ -63,7 +65,7 @@ N_lip = 300;  % Output layers (Real LIP layer)
 
 % ============ Times ============
 if ION_cluster
-    dt = 5e-3; % Size of time bin in seconds
+    dt = 1e-3; % Size of time bin in seconds
 else
     dt = 5e-3;
 end
@@ -99,12 +101,12 @@ if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
-    N_rep = 200; % For each condition
+    N_rep = 50; % For each condition
 else
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
-    N_rep = 10;
+    N_rep = 20;
 end
 
 % =================== Stimuli ===================
@@ -152,8 +154,8 @@ time_const_int = 10000e-3; % in s
 time_const_lip = 100e-3; % in s
 
 % ---- Sensory to INTEGRATOR ----
-g_w_int_vest = 20; % Let's vary the gain separately
-g_w_int_vis = 20; 
+g_w_int_vest = 60; % Let's vary the gain separately
+g_w_int_vis = 60; 
 dc_w_int_vis = 0;
 k_int_vis = 4; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider
@@ -200,7 +202,7 @@ threshold_lip = 0.0;
 save_folder = '';
 
 % ==== Heterogeneity ====
-heter_enable = 1; % Master switch of heterogeneity
+heter_enable = 0; % Master switch of heterogeneity
 
 % --- "POST": Add heterogeneity in post synaptic parameters ---
 % Variability in:    g       k     dc                   
@@ -215,10 +217,10 @@ heter_post (:) = 0;
 heter_normal = heter_enable * 0 * [1 1 1 1];  % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "Dropout": Increase sparseness in the weight matrix ---
-heter_dropout = heter_enable * 0.3 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+heter_dropout = heter_enable * 0.6 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "LogNormal": log normal distribution for each group of weights (diagonal) ---
-heter_lognormal  = heter_enable * 1 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+heter_lognormal  = heter_enable * 2 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
 vis_vest_weight_noise_cor = heter_enable * -0.5;  % Controls the correlation between noise of weight in vest -> int and vis -> int
 
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
@@ -363,7 +365,7 @@ if if_debug
     h = plotyy(t_motion,acc,t_motion,vel_vis);
     ylabel(h(2),'Velocity (m/s)');
     ylabel(h(1),'Acceleration (m^2/s)');
-   	keyboard;
+   	% keyboard;
 end
 
 %%%%%%%%%%% Pack all paras %%%%%%%%%%%
@@ -708,6 +710,8 @@ spikes_target = zeros(N_lip,trial_dur_total_in_bins,n_parfor_loops);
 spikes_vis = zeros(N_vis,trial_dur_total_in_bins,n_parfor_loops);
 spikes_vest = zeros(N_vest,trial_dur_total_in_bins,n_parfor_loops);
 
+rate_vest = zeros(N_vest,trial_dur_total_in_bins,n_parfor_loops);
+rate_vis = zeros(N_vis,trial_dur_total_in_bins,n_parfor_loops);
 rate_int = zeros(N_int,trial_dur_total_in_bins,n_parfor_loops);
 spikes_int = zeros(N_int,trial_dur_total_in_bins,n_parfor_loops);
 rate_lip = zeros(N_lip,trial_dur_total_in_bins,n_parfor_loops);
@@ -896,6 +900,9 @@ parfor tt = 1:n_parfor_loops % For each trial
     spikes_vest(:,:,tt)= spikes_vest_this;
     spikes_int(:,:,tt)  = spikes_int_this;
     spikes_lip(:,:,tt)  = spikes_lip_this;
+    
+    rate_vest(:,:,tt) = aux_proba_vest/dt;
+    rate_vis(:,:,tt) = aux_proba_vis/dt;
     rate_int(:,:,tt) = rate_int_this;
     rate_lip(:,:,tt) = rate_lip_this;
     
@@ -912,6 +919,8 @@ spikes_vis= reshape(spikes_vis,N_vest,trial_dur_total_in_bins,N_rep,length(uniqu
 spikes_vest= reshape(spikes_vest,N_vest,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
 spikes_int  = reshape(spikes_int,N_int,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
 spikes_lip  = reshape(spikes_lip,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
+rate_vest = reshape(rate_vest,N_vest,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
+rate_vis = reshape(rate_vis,N_vis,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
 rate_int = reshape(rate_int,N_int,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
 rate_lip = reshape(rate_lip,N_lip,trial_dur_total_in_bins,N_rep,length(unique_heading),length(unique_stim_type));
 RT = reshape(RT,N_rep,length(unique_heading),length(unique_stim_type));
@@ -929,7 +938,7 @@ correct_ans_all = reshape(correct_ans_all,N_rep,length(unique_heading),length(un
 % end
 
 if if_debug || 1
-    to_assignin = {'rate_lip','paras','rate_int','spikes_target','spikes_vis','spikes_vest','spikes_int','spikes_lip',...
+    to_assignin = {'ION_cluster','rate_lip','rate_vest','rate_vis','paras','rate_int','spikes_target','spikes_vis','spikes_vest','spikes_int','spikes_lip',...
                    'proba_target_tuning','RT','correct_ans_all','w_lip_lip','w_lip_int','w_int_vis','w_int_vest'};
     for tta = 1:length(to_assignin)
         assignin('base',to_assignin{tta},eval(to_assignin{tta}));
@@ -958,6 +967,10 @@ if nargin == 2 % Save result
 end
 
 save(sprintf('./result/%sresults.mat',save_folder),'weights_saved','paras','result');
+
+if ~ION_cluster
+    keyboard;
+end
 
 end
 

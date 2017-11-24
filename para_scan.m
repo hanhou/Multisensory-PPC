@@ -140,13 +140,9 @@ scan = tic;
 % xs = 0:-0.5:-2;  x_name = 'vis_vest_weight_noise_cor';
 % ys = 0:0.5:3;  y_name = 'heter_lognormal';
 
-save_folder = '20171118_dropout_and_lognormal';
+save_folder = '20171121_dropout_and_lognormal_all_raw_spike_corr/'
 xs = 0:0.2:0.8;  x_name = 'heter_dropout';
 ys = 0:0.5:3;  y_name = 'heter_lognormal';
-
-%% Save para_scan file
-copyfile([mfilename('fullpath') '.m'],sprintf('./result/%s/',save_folder));
-
 
 initiated = 0;
 
@@ -488,5 +484,7 @@ export_fig('-painters','-nocrop','-m2' ,sprintf('./result/%sPred_ratio.png',save
 saveas(gcf,sprintf('./result/%sPred_ratio.fig',save_folder),'fig');
 %}
 
+%% Save para_scan file
+copyfile([mfilename('fullpath') '.m'],sprintf('./result/%s/',save_folder));
 
 
