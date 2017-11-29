@@ -1,6 +1,7 @@
 function result = SeriesComparison(ys,ts,varargin)
 % Compare time series result = SeriesComparison(ys,ts,varargin) 
 % If ys is matrix, the third dimension represents the category HH20141224
+% ys = [samples,times,categories]
 %
 % ------ Input parameters -------
 % paras = inputParser;
@@ -103,11 +104,13 @@ if ~iscell(ys) % Only one j (old version)
         error_type = find(fliplr(dec2bin(paras.Results.ErrorBar))=='1');
         
         if sum(error_type == 2)>0 && ~all(errors == 0)
-            result.h(cat) = shadedErrorBar(ts,means,errors,...
-                {'Color',colors{1+mod(cat-1,length(colors))},...
-                'LineStyle',paras.Results.LineStyles{1+mod(cat-1,length(paras.Results.LineStyles))}},...
-                transparent);
-            set(result.h(cat).mainLine,'LineWidth',2);
+            if ~all(isnan(errors))
+                result.h(cat) = shadedErrorBar(ts,means,errors,...
+                    {'Color',colors{1+mod(cat-1,length(colors))},...
+                    'LineStyle',paras.Results.LineStyles{1+mod(cat-1,length(paras.Results.LineStyles))}},...
+                    transparent);
+                set(result.h(cat).mainLine,'LineWidth',2);
+            end
         elseif sum(error_type == 1)>0
             result.h(cat) = errorbar(ts,means,errors,...
                 'Color',colors{1+mod(cat-1,length(colors))},...

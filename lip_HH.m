@@ -10,8 +10,6 @@ function result = lip_HH(para_override,output_result)
 %clear
 %clear global
 
-warning off stats:obsolete:ReplaceThisWith;
-
 if(~isdeployed)
     cd(fileparts(which(mfilename)));
 end
@@ -38,6 +36,12 @@ else % My own computer
     ION_cluster = 0;
 end
 
+pctRunOnAll warning off stats:obsolete:ReplaceThisWithMethodOfObjectReturnedBy;
+
+if ~exist('./result/','dir')
+    mkdir('./result/');
+end
+
 % Override
 % ION_cluster = 1;
 
@@ -53,19 +57,19 @@ h_grouped = [];
 % ============ Sizes ============
 % Input layers
 N_targets = 2; % Target input
-N_vis = 200; % Visual motion signal
-N_vest = 200; % Vestibular motion signal
+N_vis = 100; % Visual motion signal
+N_vest = 100; % Vestibular motion signal
 
 % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
 % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
 % which has a short time constant, keeps receiving target input but does not integrate it.
 % For most part of the code, I just rename the old "_lip" stuff to "_int"
-N_int = 300;
-N_lip = 300;  % Output layers (Real LIP layer)
+N_int = 100;
+N_lip = 100;  % Output layers (Real LIP layer)
 
 % ============ Times ============
 if ION_cluster
-    dt = 1e-3; % Size of time bin in seconds
+    dt = 5e-3; % Size of time bin in seconds
 else
     dt = 5e-3;
 end
@@ -77,7 +81,9 @@ delay_for_all = 0.15; % in s
 delay_another_for_visual = 0.1; % in s
 
 % ============ Decision bound ============
-if_bound_RT = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version); otherwise, use fixed_RT below
+% if_bounded = 1 means that the trial stops at the bound (reaction time version); otherwise, use fixed_RT below
+% For calculating information, always use 1.5s fixed_RT.
+if_bound_RT = 0; 
 read_out_at_the_RT = 0; % Readout decision at RT instead of at the end of each trial
 % d = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
@@ -101,12 +107,12 @@ if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
-    N_rep = 50; % For each condition
+    N_rep = 200; % For each condition
 else
-    unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
+    unique_heading = [-8 0 8];
     conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
-    N_rep = 20;
+    N_rep = 10;
 end
 
 % =================== Stimuli ===================
@@ -120,8 +126,8 @@ r_spont_vis = 10;
 b_pref_vis = 1.7;
 b_null_vis = -0.2;
 K_vis = 1.5;
-K_cov_vis = 2;
-var_vis = 1e-5;
+K_cov_vis = 1;
+var_vis = 3e-2;
 
 
 % Parameters for MT from Mazurek and Shadlen, except width.
@@ -150,12 +156,12 @@ gain_acc_vest = 2.6; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
 
 % =================== Network configuration ===================
 % -- Time constant for integration
-time_const_int = 10000e-3; % in s
+time_const_int = 100e-3; % in s
 time_const_lip = 100e-3; % in s
 
 % ---- Sensory to INTEGRATOR ----
-g_w_int_vest = 60; % Let's vary the gain separately
-g_w_int_vis = 60; 
+g_w_int_vest = 10; % Let's vary the gain separately
+g_w_int_vis = 10; 
 dc_w_int_vis = 0;
 k_int_vis = 4; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider
@@ -168,13 +174,13 @@ k_lip_targ= 5;
 att_gain_targ = 1; % Drop in attention to visual target once motion stimulus appears.
 
 % % ------- Recurrent connectivity in INTEGRATOR --------
-% g_w_int_int = 35;
-% K_int_int = 10;
-% dc_w_int_int = -11;
-%
-% amp_I_int = 0;  % Mexico hat shape
-% K_int_I = 2;
-% bias_int = 0;
+g_w_int_int = 0; % 1;
+K_int_int = 5;
+dc_w_int_int = 0; % -0.8;
+
+amp_I_int = 0;  % Mexico hat shape
+K_int_I = 2;
+bias_int = 0;
 % Input-output function of INTEGRATOR
 threshold_int = 0.0;
 
@@ -484,10 +490,10 @@ else
         %         + dc_w_int_vest/N_vest;   % Offset
         
         % -- Int->Int --
-        %     w_int_int(nn,:) = g_w_int_int/N_int*...   %  Integrator recurrent
-        %         ((exp(K_int_int*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1)))-...
-        %         amp_I_int*(exp(K_int_I*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1))))...
-        %         + dc_w_int_int/N_int;
+        w_int_int(nn,:) = g_w_int_int/N_int*...   %  Integrator recurrent
+            ((exp(K_int_int*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1)))-...
+            amp_I_int*(exp(K_int_I*(cos((prefs_int-prefs_int(nn))/360*2*pi)-1))))...
+            + dc_w_int_int/N_int;
     end
     
     
@@ -692,8 +698,8 @@ z=[x(:) y(:)];
 ss_hh_cheatsheet = reshape(repmat(z,1,N_rep)',2,[])'; % All combinations of ss and hh
 n_parfor_loops = size(ss_hh_cheatsheet,1);
 
-proba_vis_for_each_heading = zeros(N_vis,length(unique_heading));
-proba_vest_for_each_heading = zeros(N_vest,length(unique_heading));
+rate_vis_for_each_heading = zeros(N_vis,length(unique_heading));
+rate_vest_for_each_heading = zeros(N_vest,length(unique_heading));
 
 % -- Data to save in parloop --
 % % Raw data
@@ -729,7 +735,7 @@ for hh = 1:length(unique_heading)  % Motion directions
     % proba_vis: proba of firing of visual neurons in response to motion
     max_rate_vis = r_spont_vis + b_pref_vis * coherence;
     b_vis = r_spont_vis + b_null_vis * coherence;
-    proba_vis_for_each_heading(:,hh) = ((max_rate_vis-b_vis)*exp(K_vis*(cos((prefs_vis'-(unique_heading(hh)+conflict_heading/2))/360*2*pi)-1))+b_vis)*dt;
+    rate_vis_for_each_heading(:,hh) = ((max_rate_vis-b_vis)*exp(K_vis*(cos((prefs_vis'-(unique_heading(hh)+conflict_heading/2))/360*2*pi)-1))+b_vis);
     
     %     max_rate_vest = r_spont_vest + b_pref_vis * coherence;
     %     b_vis = r_spont_vis + b_null_vis * coherence;
@@ -738,7 +744,7 @@ for hh = 1:length(unique_heading)  % Motion directions
     % Here I just set the vestibular activity similar to visual response under 'equivalent_coh' coh
     max_rate_vest = r_spont_vest + b_pref_vest * equivalent_conherence;
     b_vest = r_spont_vest + b_null_vest * equivalent_conherence;
-    proba_vest_for_each_heading(:,hh) = ((max_rate_vest-b_vest)*exp(K_vest*(cos((prefs_vest'-(unique_heading(hh)-conflict_heading/2))/360*2*pi)-1))+b_vest)*dt;
+    rate_vest_for_each_heading(:,hh) = ((max_rate_vest-b_vest)*exp(K_vest*(cos((prefs_vest'-(unique_heading(hh)-conflict_heading/2))/360*2*pi)-1))+b_vest);
     
     %         if if_debug
     %             figure(91);clf;
@@ -783,25 +789,26 @@ parfor tt = 1:n_parfor_loops % For each trial
     spikes_target_this = rand(N_lip,trial_dur_total_in_bins)<(aux_proba_target);
     
     % -- Visual input spike train --
-    aux_proba_vis = proba_vis_for_each_heading(:,hh_this)*[zeros(1,stim_on_time_in_bins) vel_vis*gain_vel_vis]...
-        + w_cov_vis*randn(N_vis,trial_dur_total_in_bins) ...
-        .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel_vis))],N_vis,1);
+    rate_vis_this = rate_vis_for_each_heading(:,hh_this)*[zeros(1,stim_on_time_in_bins) vel_vis*gain_vel_vis]...
+        + w_cov_vis / dt * randn(N_vis,trial_dur_total_in_bins) ... % Note that the noise term depends on dt!! HH20171128
+        .* 1 ;% repmat([zeros(1,stim_on_time_in_bins) ones(size(vel_vis))],N_vis,1);  % No reason to turn off noise before stimuli. HH20171128
     
     % -- Vestibular ---
     % With the temporal gain of abs(acc)
-    aux_proba_vest = proba_vest_for_each_heading(:,hh_this)*[zeros(1,stim_on_time_in_bins) abs(acc)*gain_acc_vest]...
-        + w_cov_vest*randn(N_vest,trial_dur_total_in_bins) ...
-        .*repmat([zeros(1,stim_on_time_in_bins) ones(size(vel_vis))],N_vis,1);
+    rate_vest_this = rate_vest_for_each_heading(:,hh_this)*[zeros(1,stim_on_time_in_bins) abs(acc)*gain_acc_vest]...
+        + w_cov_vest / dt * randn(N_vest,trial_dur_total_in_bins) ...   % Note that the noise term depends on dt!!
+        .* 1; % repmat([zeros(1,stim_on_time_in_bins) ones(size(vel_vis))],N_vis,1);
     
     % -- Stimulus condition selection --
+    % Or alternatively, I should only turn off the sensory input but let the correlated noise unchanged?
     if unique_stim_type(ss_this) == 1
-        aux_proba_vis = 0*aux_proba_vis; % Shut down visual activity
+        rate_vis_this = 0 * rate_vis_this; % Shut down visual activity
     elseif unique_stim_type(ss_this) ==2
-        aux_proba_vest = 0*aux_proba_vest; % Shut down vestibular activity
+        rate_vest_this = 0 * rate_vest_this; % Shut down vestibular activity
     end
     
-    spikes_vis_this = rand(N_vis,trial_dur_total_in_bins)<(aux_proba_vis);
-    spikes_vest_this = rand(N_vest,trial_dur_total_in_bins)<(aux_proba_vest);
+    spikes_vis_this = rand(N_vis,trial_dur_total_in_bins)<(rate_vis_this) * dt; % Put dt here. HH20171128
+    spikes_vest_this = rand(N_vest,trial_dur_total_in_bins)<(rate_vest_this) * dt;
     
     % -- Reset the attention for motion stimuli --
     att_gain_stim = 1; % Drop in attention to motion stimuli due to hitting whatever decision bound.
@@ -829,11 +836,12 @@ parfor tt = 1:n_parfor_loops % For each trial
         %                         );
         
         % Just let the INTEGRATOR to be ideal. (straight sum)
-%         rate_int_this(:,k+1) = rate_int_this(:,k)...   %  Self dynamics.  in Hz!
+%         rate_int_this(:,k+1) = rate_int_this(:,k)...   %  No self dynamics, just sum.  in Hz!
 %             + att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input 
 %             + att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
 
-        rate_int_this(:,k+1) = rate_int_this(:,k)...   %  Self dynamics.  in Hz!
+        rate_int_this(:,k+1) = rate_int_this(:,k) + ...   %  No self dynamics, just sum.  in Hz!
+            1/time_const_int * (w_int_int * spikes_int_this(:,k))... % Add self dynamics for normalization here?
             + att_gain_stim * w_int_vis * w_int_vis_timevarying_factor(k) * spikes_vis_this(:,k)...     % Visual input with reliablity-dependent weights HH20171026
             + att_gain_stim * w_int_vest * w_int_vest_timevarying_factor(k) * spikes_vest_this(:,k);     % Vestibular input with reliablity-dependent weights
         
@@ -901,8 +909,8 @@ parfor tt = 1:n_parfor_loops % For each trial
     spikes_int(:,:,tt)  = spikes_int_this;
     spikes_lip(:,:,tt)  = spikes_lip_this;
     
-    rate_vest(:,:,tt) = aux_proba_vest/dt;
-    rate_vis(:,:,tt) = aux_proba_vis/dt;
+    rate_vest(:,:,tt) = rate_vest_this/dt;
+    rate_vis(:,:,tt) = rate_vis_this/dt;
     rate_int(:,:,tt) = rate_int_this;
     rate_lip(:,:,tt) = rate_lip_this;
     
@@ -969,7 +977,11 @@ end
 save(sprintf('./result/%sresults.mat',save_folder),'weights_saved','paras','result');
 
 if ~ION_cluster
-    keyboard;
+    tmp1 = whos;
+    for i = 1:length(tmp1)
+        assignin('base',tmp1(i).name,eval(tmp1(i).name));
+    end
+    % keyboard;
 end
 
 end

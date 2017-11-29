@@ -64,7 +64,7 @@ elseif N == 0
 %         disp([repmat(char(8), 1, (w+9)), char(10), '100%[', repmat('=', 1, w+1), ']']);
 %     end
 else
-    if ~exist(sprintf('parfor_progress_%s.txt',hostname), 'file')i
+    if ~exist(sprintf('parfor_progress_%s.txt',hostname), 'file')
         error('parfor_progress.txt not found. Run PARFOR_PROGRESS(N) before PARFOR_PROGRESS to initialize parfor_progress.txt.');
     end
     
