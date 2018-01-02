@@ -17,8 +17,9 @@ addpath(genpath(pwd));
 
 rand('state',sum(100*clock));
 
-if strcmp(version('-release'),'2014b')    % ION cluster;
-    hostname = char( getHostName( java.net.InetAddress.getLocalHost)); % Get host name
+hostname = char( getHostName( java.net.InetAddress.getLocalHost)); % Get host name
+
+if ~isempty(strfind(hostname,'node')) || ~isempty(strfind(hostname,'clc')) % contains(hostname,{'node','clc'})  % ION cluster;
     if isempty(gcp('nocreate'))
         parpool(hostname(1:strfind(hostname,'.')-1),20);
     end
@@ -57,21 +58,21 @@ h_grouped = [];
 % ============ Sizes ============
 % Input layers
 N_targets = 2; % Target input
-N_vis = 100; % Visual motion signal
-N_vest = 100; % Vestibular motion signal
+N_vis = 200; % Visual motion signal
+N_vest = 200; % Vestibular motion signal
 
 % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
 % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
 % which has a short time constant, keeps receiving target input but does not integrate it.
 % For most part of the code, I just rename the old "_lip" stuff to "_int"
-N_int = 100;
-N_lip = 100;  % Output layers (Real LIP layer)
+N_int = 200;
+N_lip = 200;  % Output layers (Real LIP layer)
 
 % ============ Times ============
 if ION_cluster
-    dt = 5e-3; % Size of time bin in seconds
+    dt = 4e-3; % Size of time bin in seconds
 else
-    dt = 5e-3;
+    dt = 4e-3;
 end
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
@@ -127,7 +128,7 @@ b_pref_vis = 1.7;
 b_null_vis = -0.2;
 K_vis = 1.5;
 K_cov_vis = 1;
-var_vis = 3e-2;
+var_vis = 8e-3;
 
 
 % Parameters for MT from Mazurek and Shadlen, except width.
@@ -163,7 +164,7 @@ time_const_lip = 100e-3; % in s
 g_w_int_vest = 10; % Let's vary the gain separately
 g_w_int_vis = 10; 
 dc_w_int_vis = 0;
-k_int_vis = 4; % Larger, narrower
+k_int_vis = 8; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider
 
 gamma = 0; % Time_varying_weight_factor = reliability ^ gamma; when gamma = 0, weights are constant over time
@@ -174,9 +175,9 @@ k_lip_targ= 5;
 att_gain_targ = 1; % Drop in attention to visual target once motion stimulus appears.
 
 % % ------- Recurrent connectivity in INTEGRATOR --------
-g_w_int_int = 0; % 1;
+g_w_int_int = 0;
 K_int_int = 5;
-dc_w_int_int = 0; % -0.8;
+dc_w_int_int = 0;
 
 amp_I_int = 0;  % Mexico hat shape
 K_int_I = 2;
@@ -523,97 +524,101 @@ else
             + dc_w_lip_lip_heter(nn)/N_lip;
     end
     
-    ws = {'int_vest','int_vis','lip_int','lip_lip'};
-    
-    w_old_int_vest = w_int_vest;
-    w_old_int_vis = w_int_vis;
-    
-    for ww = 1:length(ws)
-        
-        % ==== Heterogeneity Method 3 : Add Gaussian noise in weights ("Normal") ====
-        % w_int_vest = w_int_vest + randn(size(w_int_vest))*std(w_int_vest(:))*heter_normal(1);
-        eval(sprintf('w_%s =  w_%s + randn(size(w_%s))*std(w_%s(:))*heter_normal(%g);',ws{ww},ws{ww},ws{ww},ws{ww},ww));
-        
-        % ==== Heterogeneity Method 4: Log ormal (proportional to the mean value) ====
-        % w_int_vest = sign(w_int_vest).* abs(w_int_vest).^(1+randn(size(w_int_vest)).* abs(w_int_vest) * heter_lognormal(1));
-        % eval(sprintf('w_%s = sign(w_%s).* abs(w_%s).^(1+randn(size(w_%s)).* abs(w_%s) * heter_lognormal(%g));',...
-        %     ws{ww},ws{ww},ws{ww},ws{ww},ws{ww},ww));
-        
-        % Calculate designed mean and variance
-        eval(sprintf(' m = abs(w_%s); v = (abs(w_%s) * heter_lognormal(%g)).^2;',ws{ww},ws{ww},ww));
-        
-        % Calculate parameters for log normal
-        miu = log(m.^2./sqrt(v+m.^2));
-        sigma = sqrt(log(v./m.^2+1));
-        
-        % Generate lognormal and recover the sign
-        eval(sprintf('w_%s = sign(w_%s) .* exp( miu + randn(size(w_%s)) .* sigma );',ws{ww},ws{ww},ws{ww}));
-        
-        % ==== Heterogeneity Method 5: Dropout while keep the mean unchanged ====
-        % w_int_vest(rand(size(w_int_vest))<(1)) = 0;
-        eval(sprintf('w_%s(rand(size(w_%s)) < heter_dropout(%g)) = 0;',ws{ww},ws{ww},ww));
-        % Scale to keep the mean unchanged
-        eval(sprintf('w_%s = w_%s / (1-heter_dropout(%g));',ws{ww},ws{ww},ww));
-        
-    end
-    
-    % %{
-    % Just to verify the distribution of diagonals of w_lip_lip
-    result.w_lip_lip = w_lip_lip;
-    
-    figure(1318); clf; hold on;
-    delta_theta = 0;
-    
-    off_diag = round(delta_theta/(360/size(result.w_lip_lip,1)));
-    x = diag(result.w_lip_lip,off_diag);
-    
-    if range(x)>0
-        [N,edges] = hist(x,min(x):0.0003:max(x));
-        plot([edges edges(end)+edges(2)-edges(1)],[smooth(N,1);0]/sum(N)/(edges(2)-edges(1)),'k-','linew',2);
-    end
-    
-    ylabel('Prob density');
-    xlabel(['LIP --> LIP, \Delta\theta = ' num2str(delta_theta)]);
-    
-    max_y = max(ylim);
-    plot(mean(x)*ones(1,2),[0 max_y*1.05],'k--')
-    
-%      h_grouped = [h_grouped gca];
-    
-    %  -- Noise correlation in int_vest and int_vis (quick and dirty) 20170613--
-    %%
-    figure(128); clf
-    vest_noise = w_int_vest - w_old_int_vest;
-    vis_noise = w_int_vis - w_old_int_vis;
-    plot(vest_noise,vis_noise,'k.');
-    
-    vest_correlated = (1-vis_vest_weight_noise_cor) * vest_noise + vis_vest_weight_noise_cor * vis_noise;
-    vis_correlated =  vis_vest_weight_noise_cor * vest_noise + (1-vis_vest_weight_noise_cor) * vis_noise;
-    hold on; plot(vest_correlated,vis_correlated,'r.');
-    [r,p] = corr(vest_correlated(:),vis_correlated(:));
-    title(sprintf('r = %g, p = %g',r,p));
-    %%
-    w_int_vest = w_old_int_vest + vest_correlated;
-    w_int_vis = w_old_int_vis + vis_correlated;
-    
-    %% Make the average of the weight matrix symmetric for heter
     if heter_enable
-        temp = mat2cell(w_int_vest,size(w_int_vest,1)/2*[1 1],size(w_int_vest,2)/2*[1 1]);
-        aver_temp = cellfun(@mean,cellfun(@mean,temp,'UniformOutput',false));
-        temp{1} = temp{1}/aver_temp(1) * mean(aver_temp([1 4]));
-        temp{4} = temp{4}/aver_temp(4) * mean(aver_temp([1 4]));
-        temp{2} = temp{2}/aver_temp(2) * mean(aver_temp([2 3]));
-        temp{3} = temp{3}/aver_temp(3) * mean(aver_temp([2 3]));
-        w_int_vest = cell2mat(temp);
         
-        temp = mat2cell(w_int_vis,size(w_int_vis,1)/2*[1 1],size(w_int_vis,2)/2*[1 1]);
-        aver_temp = cellfun(@mean,cellfun(@mean,temp,'UniformOutput',false));
-        temp{1} = temp{1}/aver_temp(1) * mean(aver_temp([1 4]));
-        temp{4} = temp{4}/aver_temp(4) * mean(aver_temp([1 4]));
-        temp{2} = temp{2}/aver_temp(2) * mean(aver_temp([2 3]));
-        temp{3} = temp{3}/aver_temp(3) * mean(aver_temp([2 3]));
-        w_int_vis = cell2mat(temp);
-    end
+        ws = {'int_vest','int_vis','lip_int','lip_lip'};
+        
+        w_old_int_vest = w_int_vest;
+        w_old_int_vis = w_int_vis;
+        
+        for ww = 1:length(ws)
+            
+            % ==== Heterogeneity Method 3 : Add Gaussian noise in weights ("Normal") ====
+            % w_int_vest = w_int_vest + randn(size(w_int_vest))*std(w_int_vest(:))*heter_normal(1);
+            eval(sprintf('w_%s =  w_%s + randn(size(w_%s))*std(w_%s(:))*heter_normal(%g);',ws{ww},ws{ww},ws{ww},ws{ww},ww));
+            
+            % ==== Heterogeneity Method 4: Log ormal (proportional to the mean value) ====
+            % w_int_vest = sign(w_int_vest).* abs(w_int_vest).^(1+randn(size(w_int_vest)).* abs(w_int_vest) * heter_lognormal(1));
+            % eval(sprintf('w_%s = sign(w_%s).* abs(w_%s).^(1+randn(size(w_%s)).* abs(w_%s) * heter_lognormal(%g));',...
+            %     ws{ww},ws{ww},ws{ww},ws{ww},ws{ww},ww));
+            
+            % Calculate designed mean and variance
+            eval(sprintf(' m = abs(w_%s); v = (abs(w_%s) * heter_lognormal(%g)).^2;',ws{ww},ws{ww},ww));
+            
+            % Calculate parameters for log normal
+            miu = log(m.^2./sqrt(v+m.^2));
+            sigma = sqrt(log(v./m.^2+1));
+            
+            % Generate lognormal and recover the sign
+            eval(sprintf('w_%s = sign(w_%s) .* exp( miu + randn(size(w_%s)) .* sigma );',ws{ww},ws{ww},ws{ww}));
+            
+            % ==== Heterogeneity Method 5: Dropout while keep the mean unchanged ====
+            % w_int_vest(rand(size(w_int_vest))<(1)) = 0;
+            eval(sprintf('w_%s(rand(size(w_%s)) < heter_dropout(%g)) = 0;',ws{ww},ws{ww},ww));
+            % Scale to keep the mean unchanged
+            eval(sprintf('w_%s = w_%s / (1-heter_dropout(%g));',ws{ww},ws{ww},ww));
+            
+        end
+        
+        % %{
+        % Just to verify the distribution of diagonals of w_lip_lip
+        result.w_lip_lip = w_lip_lip;
+        
+        figure(1318); clf; hold on;
+        delta_theta = 0;
+        
+        off_diag = round(delta_theta/(360/size(result.w_lip_lip,1)));
+        x = diag(result.w_lip_lip,off_diag);
+        
+        if range(x)>0
+            [N,edges] = hist(x,min(x):0.0003:max(x));
+            plot([edges edges(end)+edges(2)-edges(1)],[smooth(N,1);0]/sum(N)/(edges(2)-edges(1)),'k-','linew',2);
+        end
+        
+        ylabel('Prob density');
+        xlabel(['LIP --> LIP, \Delta\theta = ' num2str(delta_theta)]);
+        
+        max_y = max(ylim);
+        plot(mean(x)*ones(1,2),[0 max_y*1.05],'k--')
+        
+        %      h_grouped = [h_grouped gca];
+        
+        %  -- Noise correlation in int_vest and int_vis (quick and dirty) 20170613--
+        %%
+        figure(128); clf
+        vest_noise = w_int_vest - w_old_int_vest;
+        vis_noise = w_int_vis - w_old_int_vis;
+        plot(vest_noise,vis_noise,'k.');
+        
+        vest_correlated = (1-vis_vest_weight_noise_cor) * vest_noise + vis_vest_weight_noise_cor * vis_noise;
+        vis_correlated =  vis_vest_weight_noise_cor * vest_noise + (1-vis_vest_weight_noise_cor) * vis_noise;
+        hold on; plot(vest_correlated,vis_correlated,'r.');
+        [r,p] = corr(vest_correlated(:),vis_correlated(:));
+        title(sprintf('r = %g, p = %g',r,p));
+        %%
+        w_int_vest = w_old_int_vest + vest_correlated;
+        w_int_vis = w_old_int_vis + vis_correlated;
+        
+        %% Make the average of the weight matrix symmetric for heter
+        if heter_enable
+            temp = mat2cell(w_int_vest,size(w_int_vest,1)/2*[1 1],size(w_int_vest,2)/2*[1 1]);
+            aver_temp = cellfun(@mean,cellfun(@mean,temp,'UniformOutput',false));
+            temp{1} = temp{1}/aver_temp(1) * mean(aver_temp([1 4]));
+            temp{4} = temp{4}/aver_temp(4) * mean(aver_temp([1 4]));
+            temp{2} = temp{2}/aver_temp(2) * mean(aver_temp([2 3]));
+            temp{3} = temp{3}/aver_temp(3) * mean(aver_temp([2 3]));
+            w_int_vest = cell2mat(temp);
+            
+            temp = mat2cell(w_int_vis,size(w_int_vis,1)/2*[1 1],size(w_int_vis,2)/2*[1 1]);
+            aver_temp = cellfun(@mean,cellfun(@mean,temp,'UniformOutput',false));
+            temp{1} = temp{1}/aver_temp(1) * mean(aver_temp([1 4]));
+            temp{4} = temp{4}/aver_temp(4) * mean(aver_temp([1 4]));
+            temp{2} = temp{2}/aver_temp(2) * mean(aver_temp([2 3]));
+            temp{3} = temp{3}/aver_temp(3) * mean(aver_temp([2 3]));
+            w_int_vis = cell2mat(temp);
+        end
+        
+    end % If heter
     
     % Return immediately for debugging
     % if nargin == 2 % Save result
@@ -972,9 +977,10 @@ if nargin == 2 % Save result
     for rr = 1:length(output_result)
         eval(['result.(output_result{rr}) =' output_result{rr}]);
     end
+    save(sprintf('./result/%sresults.mat',save_folder),'weights_saved','paras','result');
+else
+    save(sprintf('./result/%sresults.mat',save_folder),'weights_saved','paras');
 end
-
-save(sprintf('./result/%sresults.mat',save_folder),'weights_saved','paras','result');
 
 if ~ION_cluster
     tmp1 = whos;

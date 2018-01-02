@@ -1,10 +1,10 @@
 %% Analysis switch
 if ION_cluster
-analysis_switch = [1;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation
+analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation
                    0;  % 0p5 Decoding method 
                        % 1 Overview (mandatary)
                    0;  % 1p5 Overview (normalized)
-                   0;  % 2 Example
+                   1;  % 2 Example
                    0;  % 3 Cells deltaPSTH
                    0;  % 3p5 Cells rawPSTH
                    0;  % 4 Heterogeneity
@@ -143,7 +143,7 @@ if if_debug
         subplot(2,2,2);
         plot(prefs_lip,rate_expected_lip_aver(:,ttt)); hold on;
         plot(prefs_lip,rate_real_lip_aver(:,ttt),'r');  hold off;
-        axis(gca,[min(prefs_lip) max(prefs_lip) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))*2]);
+        axis(gca,[min(prefs_lip) max(prefs_lip) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))*2+0.1]);
         title(sprintf('LIP, t = %g',ttt*dt*1000));
         
         % Visual layer
@@ -963,7 +963,8 @@ if analysis_switch(4)
             for cc = 1:2 % Pref and Null
                 
                 this_heading_ind = find(unique_heading == to_plot_abs_headings(tph) * pref_null(cc),1);
-                this_correct_ind = find(choices(:,this_heading_ind,ss) == pref_null(cc)); % Only correct trials
+                % this_correct_ind = find(choices(:,this_heading_ind,ss) == pref_null(cc)); % Only correct trials
+                this_correct_ind = find(choices(:,this_heading_ind,ss) > -inf); % All trials
                 
                 for tt = 1:ceil(length(this_correct_ind)/n_to_plot_trace):length(this_correct_ind)
                     
