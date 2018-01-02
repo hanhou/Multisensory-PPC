@@ -54,7 +54,7 @@ if N > 0
     fclose(f);
     
     if nargout == 0
-        disp(['  0%[>', repmat(' ', 1, w), ']']);
+        fprintf(['  0%%[>', repmat(' ', 1, w), ']']);
     end
 elseif N == 0
     delete(sprintf('parfor_progress_%s.txt',hostname));
@@ -64,7 +64,7 @@ elseif N == 0
 %         disp([repmat(char(8), 1, (w+9)), char(10), '100%[', repmat('=', 1, w+1), ']']);
 %     end
 else
-    if ~exist(sprintf('parfor_progress_%s.txt',hostname), 'file')i
+    if ~exist(sprintf('parfor_progress_%s.txt',hostname), 'file')
         error('parfor_progress.txt not found. Run PARFOR_PROGRESS(N) before PARFOR_PROGRESS to initialize parfor_progress.txt.');
     end
     
@@ -78,7 +78,9 @@ else
     percent = (length(progress)-1)/progress(1)*100;
     
     if nargout == 0
-        perc = sprintf('%3.0f%%', percent); % 4 characters wide, percentage
-        disp([repmat(char(8), 1, (w+9)), char(10), perc, '[', repmat('=', 1, round(percent*w/100)), '>', repmat(' ', 1, w - round(percent*w/100)), ']']);
+        perc = sprintf('%3.0f%%%%', percent); % 4 characters wide, percentage
+%         disp([repmat(char(8), 1, (w+9)), char(10), perc, '[', repmat('=', 1, round(percent*w/100)), '>', repmat(' ', 1, w - round(percent*w/100)), ']']);
+        fprintf([repmat('\b',1, (w+9)),'\n']);
+        fprintf([perc, '[', repmat('=', 1, round(percent*w/100)), '>', repmat(' ', 1, w - round(percent*w/100)), ']']);
     end
 end

@@ -70,7 +70,7 @@ N_lip = 300;  % Output layers (Real LIP layer)
 
 % ============ Times ============
 if ION_cluster
-    dt = 1e-3; % Size of time bin in seconds
+    dt = 2e-3; % Size of time bin in seconds
 else
     dt = 5e-3;
 end
@@ -88,8 +88,8 @@ read_out_at_the_RT = 0; % Readout decision at RT instead of at the end of each t
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
 
 % Smoothed max
-decis_bound = 37*[1 1 1] + [0 0 5]; % bound height, for different conditions
-% decis_bound = [inf inf inf]; % bound height, for different conditions
+decis_bound = 37*[1 1 1] + 5*[0 0 1]; % bound height, for different conditions
+% decis_thres = [inf inf inf]; % bound height, for different conditions
 
 %  decis_bound = 40*[1 1 1+8/29]; % bound height, for different conditions
 
@@ -106,7 +106,7 @@ if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
-    N_rep = 50; % For each condition
+    N_rep = 100; % For each condition
 else
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     conflict_heading = 0; % Vis - Vest
@@ -120,7 +120,7 @@ num_of_sigma = 3.5; amp = 0.2;
 
 % Parameters roughly follow the Yong Gu's MST data.
 % Visual
-coherence = 10;
+coherence = 12;
 r_spont_vis = 10;
 b_pref_vis = 1.7;
 b_null_vis = -0.2;
@@ -158,9 +158,9 @@ gain_acc_vest = 2.6; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
 time_const_int = 10000e-3; % in s
 time_const_lip = 100e-3; % in s
 
-% ---- Sensory to INTEGRATOR ----
-g_w_int_vest = 60; % Let's vary the gain separately
-g_w_int_vis = 60; 
+% ---- Visual to INTEGRATOR ----
+g_w_int_vest = 20; % Let's vary the gain separately
+g_w_int_vis = 20; 
 dc_w_int_vis = 0;
 k_int_vis = 4; % Larger, narrower
 k_int_vis_along_vis = 0.1; % Larger, wider
@@ -225,8 +225,8 @@ heter_normal = heter_enable * 0 * [1 1 1 1];  % vest -> int, vis -> int, int -> 
 heter_dropout = heter_enable * 0.6 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "LogNormal": log normal distribution for each group of weights (diagonal) ---
-heter_lognormal  = heter_enable * 2 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
-vis_vest_weight_noise_cor = heter_enable * -0.5;  % Controls the correlation between noise of weight in vest -> int and vis -> int
+heter_lognormal  = heter_enable * 1 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+vis_vest_weight_noise_cor = heter_enable * -0.8;  % Controls the correlation between noise of weight in vest -> int and vis -> int
 
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
 para_override_txt = '';                 
@@ -916,7 +916,9 @@ parfor tt = 1:n_parfor_loops % For each trial
     rate_int(:,:,tt) = rate_int_this;
     rate_lip(:,:,tt) = rate_lip_this;
     
-    parfor_progress;
+    try
+        parfor_progress;
+    end
     
 end % of parfor trial
 parfor_progress(0);

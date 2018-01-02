@@ -1,14 +1,14 @@
 %% Analysis switch
 if ION_cluster
-analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation
+analysis_switch = [1;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation
                    0;  % 0p5 Decoding method 
                        % 1 Overview (mandatary)
-                   0;  % 1p5 Overview (normalized)
+                   1;  % 1p5 Overview (normalized)
                    1;  % 2 Example
-                   0;  % 3 Cells deltaPSTH
-                   0;  % 3p5 Cells rawPSTH
-                   0;  % 4 Heterogeneity
-                   0;  % 5 Linear regression (Gu 2008)
+                   1;  % 3 Cells deltaPSTH
+                   1;  % 3p5 Cells rawPSTH
+                   1;  % 4 Heterogeneity
+                   1;  % 5 Linear regression (Gu 2008)
                    1;  % 6 Information in sensory areas
                    ];
 else
@@ -1327,7 +1327,7 @@ if analysis_switch(8)
     %% ======  Part II: Large window, R^2 and weight. Figure 5 of Gu 2008  =====
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     toi = [1 1.4] ;   % Time of interests for weights illustration
-    t_span_large = 0.2;
+    t_span_large = 1;
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     t_centers = toi;
     
