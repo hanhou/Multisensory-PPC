@@ -3,8 +3,9 @@ function [info, svm_model_final] = fisher_HH(activities, headings, train_ratio, 
 %   [w,info] = fisher_HH(activities, headings, train_ratio)
 %   activities: [trials, neurons]
 %   headings: [trials, 1]
+info_cutoff = 100;
 
-if_debug = 1;
+if_debug = 0;
 figN = round(rand()*100);
 
 % Ignore zero headings (or randomly assign directions)
@@ -86,7 +87,7 @@ if nargin == 3 % No svm_model_override
     [bias_all, threshold_all] = cum_gaussfit_max1(psychometric_all);
     
     info = 2 * 1/threshold_test^2;  % Fisher info = (d'/ds)^2 = (ds/sigma_r/ds)^2 = (1/sigma_r)^2 = (sqrt(2)/sigma_psycho)^2 = 2/threshold^2.
-    if info > 10 || abs(bias_test) >= max(abs(headings))
+    if info > info_cutoff % || abs(bias_test) >= max(abs(headings))
         info = 0;
     end
     
@@ -107,8 +108,11 @@ if nargin == 3 % No svm_model_override
         axis([-8.5 8.5 0 1]);
         
         file_name = sprintf('./result/6p5_Info_debug_%g',figN);
-        export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
-        saveas(gcf,[file_name '.fig'],'fig');
+        try
+            export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+            saveas(gcf,[file_name '.fig'],'fig');
+        end
+
     end
     
 else % Use svm_model_override
@@ -121,9 +125,9 @@ else % Use svm_model_override
         
     info = 2 * 1/threshold_all^2;  % Fisher info = (d'/ds)^2 = (ds/sigma_r/ds)^2 = (1/sigma_r)^2 = (sqrt(2)/sigma_psycho)^2 = 2/threshold^2.
 
-    if info > 10 || abs(bias_all) >= max(abs(headings))
+    if info > info_cutoff % || abs(bias_all) >= max(abs(headings))
         info = 0;
-        
+        %{
         figure(2008); 
         hold on
         xxx = -max(unique_heading):0.1:max(unique_heading);
@@ -136,6 +140,7 @@ else % Use svm_model_override
         file_name = sprintf('./result/6p5_Info_debug_%g',2008);
         export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
         saveas(gcf,[file_name '.fig'],'fig');
+        %}
     end
 
 end

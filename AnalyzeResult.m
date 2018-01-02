@@ -1,10 +1,10 @@
 %% Analysis switch
 if ION_cluster
-analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 
+analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation
                    0;  % 0p5 Decoding method 
                        % 1 Overview (mandatary)
                    0;  % 1p5 Overview (normalized)
-                   0;  % 2 Example
+                   1;  % 2 Example
                    0;  % 3 Cells deltaPSTH
                    0;  % 3p5 Cells rawPSTH
                    0;  % 4 Heterogeneity
@@ -12,11 +12,11 @@ analysis_switch = [0;  % 0p1 Fig2a of Beck 2008
                    1;  % 6 Information in sensory areas
                    ];
 else
-analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 
+analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation 
                    0;  % 0p5 Decoding method 
                        % 1 Overview (mandatary)
                    0;  % 1p5 Overview (normalized)
-                   0;  % 2 Example
+                   1;  % 2 Example
                    0;  % 3 Cells deltaPSTH
                    0;  % 3p5 Cells rawPSTH
                    0;  % 4 Heterogeneity
@@ -82,7 +82,7 @@ if if_debug
         
         real_rate_lip(:,tt,:,:,:) = sum(spikes_lip(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2)/win_wid;
         real_rate_int(:,tt,:,:,:) = sum(spikes_int(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2)/win_wid;
-        real_rate_lip(:,tt,:,:,:) = sum(spikes_lip(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2)/win_wid;
+        % real_rate_lip(:,tt,:,:,:) = sum(spikes_lip(:,this_win_beg <= ts & ts < this_win_end,:,:,:),2)/win_wid;
     end
     
     figure(1041); clf
@@ -95,7 +95,7 @@ if if_debug
     % export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/test.png'));
     
     %% Example snapshot of population activity (for demo)
-    spkCntCent = [1.0];
+    spkCntCent = [1.4];
     spkCntWin = 0.2; % 200 ms
     areas = {'lip','int','target','vest','vis'};
     cols = {'g','k','k','b','r'};
@@ -104,11 +104,12 @@ if if_debug
     
     for aa = 1:length(areas) % Draw the last condition
         eval(sprintf('real_count_%s = sum(spikes_%s(:,spkCntCent-spkCntWin/2 <= ts & ts < spkCntCent+spkCntWin/2,end,end,end),2);',areas{aa},areas{aa}));
-        subplot(2,3,aa);
+        subplot(2,3,aa); 
         eval(sprintf('plot(prefs_%s,real_count_%s,''o%s''); title(''%s'');',areas{aa},areas{aa},cols{aa},areas{aa}));
         if aa >= 4
             hold on; plot([0 0],[0 max(ylim)],'k--');
         end
+        ylabel('Spike count');
     end
 end
 %}
@@ -142,7 +143,7 @@ if if_debug
         subplot(2,2,2);
         plot(prefs_lip,rate_expected_lip_aver(:,ttt)); hold on;
         plot(prefs_lip,rate_real_lip_aver(:,ttt),'r');  hold off;
-        axis(gca,[min(prefs_lip) max(prefs_lip) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))*2]);
+        axis(gca,[min(prefs_lip) max(prefs_lip) min(rate_expected_lip_aver(:)) max(rate_expected_lip_aver(:))*2+0.1]);
         title(sprintf('LIP, t = %g',ttt*dt*1000));
         
         % Visual layer
@@ -177,15 +178,47 @@ else % Not debug, Fig.2a in Beck 2008
       title('PSTH');
       legend(num2str(to_snap_time'));
       
-      subplot(1,2,2);
-      plot(prefs_lip(1:end/2),rate_expected_lip_aver(end/2+1:end,snapshots)-fliplr(rate_expected_lip_aver(1:end/2,snapshots)),'o');
-      title('Diff PSTH');
-      set(gca,'xtick',-180:90:180);
+%       subplot(1,3,2);
+%       plot(prefs_lip(1:end/2),rate_expected_lip_aver(end/2+1:end,snapshots)-fliplr(rate_expected_lip_aver(1:end/2,snapshots)),'o');
+%       title('Diff PSTH');
+%       set(gca,'xtick',-180:90:180);
+      
+      %% Verifying noise correlation. HH20171127
+      spikecount_vest_each_trial = squeeze(reshape(sum(spikes_vest(:,ts>stim_on_time,:,:,[1 3]),2),N_vest,N_rep,[])); % All spikes
+      noise_vest = reshape(spikecount_vest_each_trial - repmat(mean(spikecount_vest_each_trial,2),1,N_rep,1),N_vest,[]); % Get noise
+      noise_correlation_vest = corrcoef(noise_vest');
+            
+      figure(1647);       subplot(1,2,2); 
+      noise_correlation_vest(logical(eye(N_vest))) = nan;
+      imagesc(prefs_vest, prefs_vest, noise_correlation_vest);
+      
+      % Follow Beck, 2008
+      aux_mask = ones(N_vest,1)*[1:N_vest];
+      mask = ((1-cos(abs(aux_mask-aux_mask')/N_vest*2*pi))/2)<.5;
+      mask = mask.*(1-eye(N_vest));
+
+      mean_corr_less_than_90 = nanmean(noise_correlation_vest(logical(mask)));
+      title(['during stimuli, mean corr = ' num2str(mean_corr_less_than_90)]);
+
+      %       % Check noise correlation before stimuli onset
+      %       subplot(1,2,1);
+      %       spikecount_vest_before_onset = squeeze(reshape(sum(spikes_vest(:,ts<=stim_on_time,:,:,[1 3]),2), N_vest,N_rep,[])); % All spikes
+      %       noise_vest_before_onset = reshape(spikecount_vest_before_onset,N_vest,[]); % Noise = spikes count itself
+      %       noise_correlation_vest_before_onset = corrcoef(noise_vest_before_onset');
+      %
+      %       noise_correlation_vest_before_onset(logical(eye(N_vest)))= nan;
+      %       imagesc(prefs_vest, prefs_vest, noise_correlation_vest_before_onset);
+      %
+      %       mean_corr_less_than_90_before_onset = nanmean(noise_correlation_vest_before_onset(logical(mask)));
+      %       title(['before stimuli, mean corr = ' num2str(mean_corr_less_than_90_before_onset)]);
+
       
       if ION_cluster
           export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s0p1_Fig2a%s.png',save_folder,para_override_txt));
           saveas(gcf,sprintf('./result/%s0p1_Fig2a%s.fig',save_folder,para_override_txt),'fig');
       end
+      
+      
   end
   %}
 end
@@ -912,7 +945,7 @@ if analysis_switch(4)
     to_plot_cell_ind = to_calculate_PSTH_cells_ind(ind);
     n_to_plot_trace = 5;
     
-    set(figure(1001),'name','Example PSTHs (correct only)'); clf;
+    set(figure(1002),'name','Example PSTHs (correct only)'); clf;
     set(gcf,'uni','norm','pos',[0.005       0.056       0.33*length(to_plot_abs_headings)       0.832]);
     hs = tight_subplot(3,2*length(to_plot_abs_headings),[0.04 0.03]);
     
@@ -930,7 +963,8 @@ if analysis_switch(4)
             for cc = 1:2 % Pref and Null
                 
                 this_heading_ind = find(unique_heading == to_plot_abs_headings(tph) * pref_null(cc),1);
-                this_correct_ind = find(choices(:,this_heading_ind,ss) == pref_null(cc)); % Only correct trials
+                % this_correct_ind = find(choices(:,this_heading_ind,ss) == pref_null(cc)); % Only correct trials
+                this_correct_ind = find(choices(:,this_heading_ind,ss) > -inf); % All trials
                 
                 for tt = 1:ceil(length(this_correct_ind)/n_to_plot_trace):length(this_correct_ind)
                     
@@ -1509,17 +1543,17 @@ if analysis_switch(9)
     
     figure(1446);   clf;
     set(gcf,'uni','norm','pos',[0.125       0.436        0.78       0.345]);
-    subplot(1,3,1); title('vest');
-    plot(info_ts,infos_dt_lip(:,1),'bo-', info_ts, infos_t_vest(:,1),'b--'); hold on
+    subplot(1,3,1); 
+    plot(info_ts,infos_dt_lip(:,1),'bo-', info_ts, infos_t_vest(:,1),'b--'); hold on; title('vest');
     
-    subplot(1,3,2); title('vis');
-    plot(info_ts,infos_dt_lip(:,2),'ro-', info_ts, infos_t_vis(:,2),'r--'); hold on
+    subplot(1,3,2); 
+    plot(info_ts,infos_dt_lip(:,2),'ro-', info_ts, infos_t_vis(:,2),'r--'); hold on; title('vis');
 
-    subplot(1,3,3); title('vis');
+    h_3 = subplot(1,3,3);
     plot(info_ts,infos_dt_lip(:,3),'go-', info_ts, infos_t_vest(:,3),'b--', ...
             info_ts, infos_t_vis(:,3),'r--', ...
             info_ts, infos_t_vis(:,3) + infos_t_vest(:,3),'k--',...
-            info_ts, infos_dt_lip(:,1) + infos_dt_lip(:,2),'k-'); hold on
+            info_ts, infos_dt_lip(:,1) + infos_dt_lip(:,2),'k-'); hold on ; title('comb');
    
     linkaxes(findobj(gcf,'type','axes'),'xy');
     
@@ -1527,7 +1561,7 @@ if analysis_switch(9)
         file_name = sprintf('./result/%s6_Info%s',save_folder,para_override_txt);
         export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
         saveas(gcf,[file_name '.fig'],'fig');
-        h_grouped = [h_grouped]; % Add h_grouped
+        h_grouped = [h_grouped h_3]; % Add h_grouped
     end
   
 end
