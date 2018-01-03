@@ -111,7 +111,7 @@ else
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
-    N_rep = 20;
+    N_rep = 10;
 end
 
 % =================== Stimuli ===================
@@ -255,8 +255,8 @@ if nargin >= 1
     end
 end
 
-[~,gitlog] = system('git describe --always');
-gitlog = sprintf('%s',gitlog(1:7));
+% [~,gitlog] = system('git describe --always');
+% gitlog = sprintf('%s',gitlog(1:7));
 cc = clock;
 cc = sprintf('%g%02g%02g%g%g',cc(1:5));
 % save_folder = [save_folder cc '_' gitlog '_'];
@@ -798,9 +798,17 @@ parfor tt = 1:n_parfor_loops % For each trial
     
     % -- Vestibular ---
     % With the temporal gain of abs(acc)
+    %{
     rate_vest_this = rate_vest_for_each_heading(:,hh_this)*[zeros(1,stim_on_time_in_bins) abs(acc)*gain_acc_vest]...
         + w_cov_vest / dt * randn(N_vest,trial_dur_total_in_bins) ...   % Note that the noise term depends on dt!!
         .* 1; % repmat([zeros(1,stim_on_time_in_bins) ones(size(vel_vis))],N_vis,1);
+    %}
+
+    % M4: Let vestibular dynamics the same as the visual one. HH20180103
+    rate_vest_this = rate_vest_for_each_heading(:,hh_this)*[zeros(1,stim_on_time_in_bins) vel_vis*gain_vel_vis]...
+        + w_cov_vest / dt * randn(N_vest,trial_dur_total_in_bins) ...   % Note that the noise term depends on dt!!
+        .* 1; % repmat([zeros(1,stim_on_time_in_bins) ones(size(vel_vis))],N_vis,1);
+
     
     % -- Stimulus condition selection --
     % Or alternatively, I should only turn off the sensory input but let the correlated noise unchanged?
