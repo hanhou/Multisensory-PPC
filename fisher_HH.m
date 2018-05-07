@@ -86,7 +86,8 @@ if nargin == 3 % No svm_model_override
     psychometric_all = [unique_heading sum(reshape(choices_svm_all_final == 1,[],length(unique_heading)),1)'/n_rep];
     [bias_all, threshold_all] = cum_gaussfit_max1(psychometric_all);
     
-    info = 2 * 1/threshold_test^2;  % Fisher info = (d'/ds)^2 = (ds/sigma_r/ds)^2 = (1/sigma_r)^2 = (sqrt(2)/sigma_psycho)^2 = 2/threshold^2.
+    info = 2 * 1/threshold_test^2;  % Fisher info = (d'/ds)^2  %% <Theoretical Neuroscience Equ 3.49> 
+                                    %             = (ds/sigma_r/ds)^2 = (1/sigma_r)^2 = (sqrt(2)/sigma_psycho)^2 = 2/threshold^2.
     if info > info_cutoff % || abs(bias_test) >= max(abs(headings))
         info = 0;
     end

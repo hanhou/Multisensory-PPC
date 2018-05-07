@@ -47,7 +47,12 @@ b_pref = 0.4;
 b_null = -0.2;
 K_in = 4;
 K_cov_mt = 2;
-var_mt = 1e-5;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% var_mt = 1e-5; % Original. Use bugged code, cor90 = 0.06
+% var_mt = 7e-5; % Bugged code, cor90 = 0.2; Corrected code, cor90 = 0.0027
+var_mt = 0.15; % Predicted by my estimation
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % parameter of the activity evoked by the visual targets
 max_rate_in2 = 42; %% in Hz
@@ -209,7 +214,7 @@ for mm = 1:2  % Motion directions
     %    %%% proba_in: proba of firing of input neurons in response to motion
     max_rate_in = r_spont_MT + b_pref*coherence;
     b_in = r_spont_MT + b_null*coherence;
-    proba_in__MTmotion = ((max_rate_in-b_in)*exp(K_in*(cos((pos_in'-pos)/180*2*pi)-1))+b_in)*delta_t;
+    proba_in_MTmotion = ((max_rate_in-b_in)*exp(K_in*(cos((pos_in'-pos)/180*2*pi)-1))+b_in)*delta_t;
     
     max_rate_in = r_spont_MT + b_pref*coherence*2;
     b_in = r_spont_MT + b_null*coherence*2;
@@ -315,11 +320,11 @@ for mm = 1:2  % Motion directions
             %       responses."
             %    However, it seems that not only the random seed fails to be updated, but even the noise is fixed! [randn(N_in,1)]
             % >>
-%             aux_proba_in = proba_in__MTmotion + w_mt*randn(N_in,1);
             
-%             spikes_in{m}(:,1:trial_dur)= rand(N_in,trial_dur)<(aux_proba_in*ones(1,trial_dur));
-            
-            aux_proba_in = proba_in__MTmotion*ones(1,trial_dur) + w_mt*randn(N_in,trial_dur);            
+%             aux_proba_in = proba_in_MTmotion + w_mt*randn(N_in,1);
+%             spikes_in{m}(:,1:trial_dur)= rand(N_in,trial_dur)<(aux_proba_in*ones(1,trial_dur));  %#ok<*SAGROW>
+             
+            aux_proba_in = proba_in_MTmotion*ones(1,trial_dur) + w_mt*randn(N_in,trial_dur);            
             spikes_in{m}(:,1:trial_dur)= rand(N_in,trial_dur)<(aux_proba_in);
 
             %          aux_proba_in = proba_in_temp + w_mt*randn(N_in,1);
@@ -466,6 +471,30 @@ aux_mask = ones(N_in,1)*[1:N_in];
 mask = ((1-cos(abs(aux_mask-aux_mask')/N_in*2*pi))/2)<.5;
 mask = mask.*(1-eye(N_in));
 cor90 = sum(sum(corr_in.*mask))/sum(sum(mask));
+
+%%%%%%%%%%%%%%%%%%%%%%%% Debug the correlation problem %%%%%%%%%%%%%%%%%%%%%%
+% HH20180503
+fano = var_in ./ mean_in;
+
+figure(1817); clf
+subplot(1,3,1);
+plot(mean_in); hold on; 
+plot(proba_in_MTmotion/delta_t,'k--'); 
+title('Firing rate'); ylim([0 max(ylim)*1.1])
+
+subplot(1,3,2); 
+plot(fano); hold on; 
+plot(xlim,[1 1],'k--'); 
+title('Fano'); ylim([0 max(ylim)*1.1])
+
+subplot(1,3,3);
+imagesc(corr_in); colorbar;
+title(sprintf('cor90 = %g',cor90));
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+figure();
+
 mask = ((1-cos(abs(aux_mask-aux_mask')/N_in*2*pi))/2)>.5;
 cor180 = sum(sum(corr_in.*mask))/sum(sum(mask));
 

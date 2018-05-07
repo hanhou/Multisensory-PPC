@@ -1,10 +1,38 @@
-%% function loss_perc = MST_Heter_Info_Loss(baseline_tc,amp_tc)
-%clear all
+% Using GROUND TRUTH to calculate linear Fisher information in heterogenerous
+% MST population with differential correlation.
+%
+% First by Han Hou @ 20180426,  houhan@gmail.com
+
 clear;
+rng('shuffle');
+addpath(genpath('/home/hh/Multisensory-PPC/util'));
+
+% ====== For cluster running 
+hostname = char( getHostName( java.net.InetAddress.getLocalHost)); % Get host name
+
+if ~isempty(strfind(hostname,'node')) || ~isempty(strfind(hostname,'clc')) % contains(hostname,{'node','clc'})  % ION cluster;
+    if isempty(gcp('nocreate'))
+        parpool;
+%         parpool(hostname(1:strfind(hostname,'.')-1),20);
+    end
+    ION_cluster = 1;
+else % My own computer
+    if strcmp(version('-release'),'2013a')
+        if matlabpool('size') == 0
+            matlabpool;
+        end
+    else
+        if isempty(gcp('nocreate'))
+            parpool;
+        end
+    end
+    ION_cluster = 0;
+end
+
 
 
 % ==== Scan nu_neurons ===
-% %{
+%{
     epsis = 0.0027;
     mean_baselines = 20;    
     std_baselines = 5;
@@ -13,10 +41,10 @@ clear;
 
 
 % ==== Scan epsis and baseline ===
-%{
-    epsis = [0 10.^(linspace(-4,0,15))];
+% %{
+    epsis = [0 10.^(linspace(-4,0,10))];
     std_baselines = 5;
-    mean_baselines = linspace(0,30,15);
+    mean_baselines = linspace(0,30,10);
     nu_neurons = 500;
 %}
 
@@ -30,8 +58,10 @@ clear;
 %}
 
 
-progressbar(0); count = 0;
+if ~ION_cluster ;progressbar(0); end
+count = 0; 
 
+tic
 for ee = 1:length(epsis) % Scan epsi
     for mbmb = 1:length(mean_baselines) % Scan baseline
         for sbsb = 1:length(std_baselines) % Scan std_baseline
@@ -39,7 +69,7 @@ for ee = 1:length(epsis) % Scan epsi
                 count = count + 1;
                 
                 % ======== Neurons and Times ========
-                nu_neuron = nu_neurons(nn)
+                nu_neuron = nu_neurons(nn);
                 
                 % ---- Uniformly distrubuted preferred heading ----
                 theta_pref = linspace(-pi,pi,nu_neuron)';
@@ -103,7 +133,7 @@ for ee = 1:length(epsis) % Scan epsi
                 resp = tuning_theta(theta_stim);
                 resp_der = tuning_theta_der(theta_stim);
                 
-                C = (1-rho)*eye(nu_neuron) + rho*exp(k*(cos(theta_pref - theta_pref')-1)); % Correlation coefficient (Moreno 2014 NN)
+                C = (1-rho)*eye(nu_neuron) + rho*exp(k*(cos(theta_pref * ones(1,nu_neuron) - ones(nu_neuron,1) * theta_pref')-1)); % Correlation coefficient (Moreno 2014 NN)
                 
                 SIGMA_0_ilPPC = zeros(nu_neuron,nu_neuron);
                 SIGMA_epsi_ilPPC = zeros(nu_neuron,nu_neuron);
@@ -111,7 +141,7 @@ for ee = 1:length(epsis) % Scan epsi
                 I_0_ts = nan(1,length(time));
                 I_epsi_ts = nan(1,length(time));
                 
-                for tt = 1:length(time)    % Across all trial
+                parfor tt = 1:length(time)    % Across all trial
                     %     for tt = round(time_max/2/dt)  % Only one time point
                     f = resp(:,tt);
                     f_der = resp_der(:,tt);
@@ -155,7 +185,11 @@ for ee = 1:length(epsis) % Scan epsi
                 I_0_ilPPC(nn) = f_der_ilPPC' * inv(SIGMA_0_ilPPC) * f_der_ilPPC * dt/1000;
                 I_epsi_ilPPC(nn) = f_der_ilPPC' * inv(SIGMA_epsi_ilPPC) * f_der_ilPPC * dt/1000;
                 
-                progressbar(count/(length(epsis)*length(mean_baselines)*length(nu_neurons)*length(std_baselines)));
+                if ~ION_cluster 
+                    progressbar(count/(length(epsis)*length(mean_baselines)*length(nu_neurons)*length(std_baselines)));
+                else
+                    fprintf('%3.1f\n',(count/(length(epsis)*length(mean_baselines)*length(nu_neurons)*length(std_baselines))*100));
+                end
             end
             
             optimality_matrix(ee,mbmb,sbsb) = mean(I_epsi_ilPPC./I_epsi_optimal)*100;
@@ -166,6 +200,7 @@ for ee = 1:length(epsis) % Scan epsi
         end
     end
 end
+toc
 
 % ====== Plot momentary information ========
 %%{
@@ -199,6 +234,13 @@ ylim([50 105]);
 xlabel('Number of neurons');
 ylabel('% of info recovery by ilPPC');
 
+if ION_cluster
+    file_name = sprintf('./0_Optimality 1D');
+    export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+    saveas(gcf,[file_name '.fig'],'fig');
+end
+
+
 
 % ========= Plot optimality matrix =========
 optimality_matrix = squeeze(optimality_matrix);
@@ -218,7 +260,7 @@ if length(mean_baselines)>1 && length(epsis)>1
     xlabel('log_{10}(\epsilon_0)');
     ylabel('Mean(Baseline)');
 elseif length(mean_baselines)>1 && length(std_baselines)>1
-    figure(14); clf;
+    figure(13); clf;
     imagesc(std_baselines,mean_baselines,optimality_matrix); axis xy;
     hold on;
     contour(std_baselines,mean_baselines, optimality_matrix,'color','k','linew',1.5,'ShowText','on');
@@ -228,6 +270,13 @@ elseif length(mean_baselines)>1 && length(std_baselines)>1
     xlabel('Std(Baseline)');
     ylabel('Mean(Baseline)');
 
+end
+
+
+if ION_cluster
+    file_name = sprintf('./1_optimality_matrix');
+    export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+    saveas(gcf,[file_name '.fig'],'fig');
 end
 
 
@@ -242,7 +291,8 @@ thetas_stim = linspace(-pi,0,10); thetas_stim = [thetas_stim fliplr(-thetas_stim
 % --- Get all tuning curves. Because we have much more theta than t, I let thetas_stim be the vectorized term
 all_tunings = nan(nu_neuron,length(thetas_stim),length(example_time)); 
 for tt = 1:length(example_time)
-    all_tunings(:,:,tt) = tuning_paras(:,1).* exp(tuning_paras(:,2).*(cos(theta_pref(:) - thetas_stim)-1)) ...
+    all_tunings(:,:,tt) = (tuning_paras(:,1)*ones(1,length(thetas_stim))).* exp( (tuning_paras(:,2)*ones(1,length(thetas_stim))) ...
+               .*(cos(theta_pref(:) * ones(1,length(thetas_stim)) - ones(length(theta_pref),1) * thetas_stim)-1)) ...
                * speed_t(example_time(tt)) + repmat((1 - tuning_paras(:,3) * speed_t(example_time(tt))) .* tuning_paras(:,4),1,length(thetas_stim));
 end
 
@@ -270,6 +320,13 @@ ylnew = max(ylims(:,2))*1.1;
 set(findall(gcf,'type','axes'),'Ylim',[0 ylnew]);
 legend(num2str(time(example_time)'));
 
+if ION_cluster
+    file_name = sprintf('./2_spatial-temporal tuning');
+    export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+    saveas(gcf,[file_name '.fig'],'fig');
+end
+
+
 % --- Averaged tuning curve with pref aligned to 0 ---
 n_average = 195;
 average_neuron = randperm(nu_neuron,n_average);
@@ -289,6 +346,13 @@ set(gca,'xtick',-180:90:180); ylim([0 60])
 title(['n=' num2str(length(average_neuron))]);
 set(gca,'color',[0.8 0.8 0.8])
 
+if ION_cluster
+    file_name = sprintf('./3_average tuning');
+    export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+    saveas(gcf,[file_name '.fig'],'fig');
+end
+
+
 %{
 % Speed profile
 figure(3); clf; hold on;
@@ -306,4 +370,6 @@ set(gca,'color',[0.8 0.8 0.8])
 % b = gamrnd((mean_b./std_b)^2,mean_b/(mean_b./std_b)^2,1,500);
 % figure(427); clf; hist(b,[0:1:60]); xlim([0 60]); SetFigure()
 % xlabel('Baseline'); ylabel('Num of cells')
+
+ 
 

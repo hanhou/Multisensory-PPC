@@ -126,7 +126,11 @@ b_pref_vis = 1.7;
 b_null_vis = -0.2;
 K_vis = 1.5;
 K_cov_vis = 2;
-var_vis = 1e-5;
+
+A_eta = 1e-5; % Described in Beck 2008 Method
+% A_eta = 0.15; % The one I predicted by my estimation that will lead to "average corr less than 90 = 0.2". For dt = 1 ms !! HH20180503
+
+var_vis = A_eta; % Although the Methods of Beck 2008 did not mention the "sqrtm", I assume there was.
 
 
 % Parameters for MT from Mazurek and Shadlen, except width.
