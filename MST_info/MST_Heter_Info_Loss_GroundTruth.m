@@ -32,18 +32,18 @@ end
 
 
 % ==== Scan nu_neurons ===
-%{
+% %{
     epsis = 0.0027;
-    mean_baselines = 20;    
-    std_baselines = 5;
-    nu_neurons = round(10.^linspace(1,log10(1000),10)) + 1;
+    mean_baselines = 23;    
+    std_baselines = 20;
+    nu_neurons = round(10.^linspace(1,log10(1000),10)) + 1; 
 %}
 
 
 % ==== Scan epsis and baseline ===
-% %{
+%{
     epsis = [0 10.^(linspace(-4,0,10))];
-    std_baselines = 5;
+    std_baselines = 20;
     mean_baselines = linspace(0,30,10);
     nu_neurons = 500;
 %}
@@ -60,9 +60,11 @@ end
 
 if ~ION_cluster ;progressbar(0); end
 count = 0; 
+optimality_matrix = [];
 
 tic
 for ee = 1:length(epsis) % Scan epsi
+    epsilon_0 = epsis(ee);
     for mbmb = 1:length(mean_baselines) % Scan baseline
         for sbsb = 1:length(std_baselines) % Scan std_baseline
             for nn = 1:length(nu_neurons)  % Scan nu_neurons
@@ -78,8 +80,8 @@ for ee = 1:length(epsis) % Scan epsi
                 % theta_pref = [randn(1,round(nu_neuron/2))*(1.2*pi/4)-(pi/2) randn(1,nu_neuron-round(nu_neuron/2))*(1.2*pi/4)+(pi/2)]';
                 % theta_pref = mod(theta_pref,2*pi)-pi;
                 
-                time_max = 2000; % ms
-                dt = 10; % ms
+                time_max = 2; % s
+                dt = 10e-3; % s
                 time = 0:dt:time_max;
                 
                 % Use the same setting as experiments
@@ -107,20 +109,33 @@ for ee = 1:length(epsis) % Scan epsi
                 gamma_A = (gamma_para(:,1)./gamma_para(:,2)).^2;
                 gamma_B = (gamma_para(:,1))./gamma_A;    gamma_B(isnan(gamma_B)) = 0;
                 tuning_paras = nan(nu_neuron,size(gamma_para,1));
+                
+                
+                
                 for pp = 1:size(gamma_para,1)
                     tuning_paras(:,pp) = gamrnd(gamma_A(pp),gamma_B(pp),nu_neuron,1);
                 end
                 
-                tuning_paras(tuning_paras(:,3)>1,3) = 1; % beta should be smaller than 1
+                Ai = tuning_paras(:,1);
+                ki = tuning_paras(:,2);
+                betai = tuning_paras(:,3);
+                Bi = tuning_paras(:,4);
+                
+                betai(betai > 1) = 1; % beta should be smaller than 1
+                
+                % To make sure the min peak is larger than (1 + min_signal_baseline_ratio)*Baseline
+                min_signal_baseline_ratio = 0.5;
+                to_trunc = find(Bi > Ai./(min_signal_baseline_ratio + betai));
+                Bi (to_trunc) = Ai(to_trunc)./(min_signal_baseline_ratio + betai(to_trunc)); 
                 
                 % ========= Spatial-temporal tunings =======
                 % [f]: Population activity as a function of stimulus theta. Baseline term accounts for what we found in Gu MST data
                 %  f(theta,t) = amp * v(t) * exp {k*(cos(theta-theta_pref)-1)} + (1 - beta * v(t)/max(v)) * baseline
-                tuning_theta = @(theta) tuning_paras(:,1).* exp(tuning_paras(:,2).*(cos(theta_pref - theta)-1)) * (speed_t) + ...
-                    (1 - tuning_paras(:,3) * speed_t ) .* repmat(tuning_paras(:,4),1,length(time));
+                tuning_theta = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)) * (speed_t) + ...
+                    (1 - betai * speed_t ) .* repmat(Bi,1,length(time));
                 % [f']: Derivative of tuning
-                tuning_theta_der = @(theta) tuning_paras(:,1).* exp(tuning_paras(:,2).*(cos(theta_pref - theta)-1)).* ...
-                    (tuning_paras(:,2) .* sin(theta_pref - theta)) * speed_t;
+                tuning_theta_der = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)).* ...
+                    (ki .* sin(theta_pref - theta)) * speed_t;
                 % -- Plot f'--
                 % fp = tuning_theta_prime(0);
                 % figure(); plot(theta_pref/pi*180,fp(:,1000))
@@ -147,7 +162,7 @@ for ee = 1:length(epsis) % Scan epsi
                     f_der = resp_der(:,tt);
                     
                     % ======= Time-dependent epsilon (after 20180426 Talk, see OneNote) ====
-                    epsi_this = epsis(ee) / (speed_t(tt) + 1e-6);
+                    epsi_this = epsilon_0 / (speed_t(tt) + 1e-6);
                     
                     % ======= Add correlation ======
                     % Exponentially decay correlation (non-differential in the heterogeneous case)
@@ -172,8 +187,8 @@ for ee = 1:length(epsis) % Scan epsi
                 end
                 
                 % ======= 1. Sum of all momentary info (standard of optimality) ========
-                I_0_optimal(nn) = sum(I_0_ts) * dt/1000;  % Area under momentary info (so that total info does not dependent on dt)
-                I_epsi_optimal(nn) = sum(I_epsi_ts) * dt/1000;
+                I_0_optimal(nn) = sum(I_0_ts) * dt;  % Area under momentary info (so that total info does not dependent on dt)
+                I_epsi_optimal(nn) = sum(I_epsi_ts) * dt;
                 
                 %     % For checking momentary info temporally
                 %         I_0_optimal(nn) = I_0_ts(round(time_max/2/dt));
@@ -182,8 +197,8 @@ for ee = 1:length(epsis) % Scan epsi
                 % ======= 2. Info of straight sum of spikes (ilPPC) ========
                 f_der_ilPPC = sum(resp_der,2);
                 
-                I_0_ilPPC(nn) = f_der_ilPPC' * inv(SIGMA_0_ilPPC) * f_der_ilPPC * dt/1000;
-                I_epsi_ilPPC(nn) = f_der_ilPPC' * inv(SIGMA_epsi_ilPPC) * f_der_ilPPC * dt/1000;
+                I_0_ilPPC(nn) = f_der_ilPPC' * inv(SIGMA_0_ilPPC) * f_der_ilPPC * dt;
+                I_epsi_ilPPC(nn) = f_der_ilPPC' * inv(SIGMA_epsi_ilPPC) * f_der_ilPPC * dt;
                 
                 if ~ION_cluster 
                     progressbar(count/(length(epsis)*length(mean_baselines)*length(nu_neurons)*length(std_baselines)));
@@ -221,6 +236,13 @@ plot(nu_neurons, I_epsi_ilPPC,'bo--','linew',3,'markerfacecol','b');
 thres_discrim_epsi = sqrt(2/I_epsi_ilPPC(end))/pi*180;
 set(text(max(ylim)*0.9,I_epsi_ilPPC(end)*0.8,sprintf('\\sigma = %g',thres_discrim_epsi)),'color','b');
 
+if ION_cluster
+    file_name = sprintf('./00_Raw Info');
+    export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+    saveas(gcf,[file_name '.fig'],'fig');
+end
+
+
 xlabel('Number of neurons');
 % plot(xlim,1/epsi*[1 1],'k','linew',2);  
 axis tight
@@ -240,8 +262,6 @@ if ION_cluster
     saveas(gcf,[file_name '.fig'],'fig');
 end
 
-
-
 % ========= Plot optimality matrix =========
 optimality_matrix = squeeze(optimality_matrix);
 
@@ -256,7 +276,7 @@ if length(mean_baselines)>1 && length(epsis)>1
     epsi_log_x_label = [-inf epsi_log_x_tick(2:end)];
     set(gca,'xtick',epsi_log_x_tick, 'xticklabel', epsi_log_x_label)
     set(gca,'ytick',0:5:max(mean_baselines))
-    colormap(hot);
+    colormap(hot); caxis([50 100])
     xlabel('log_{10}(\epsilon_0)');
     ylabel('Mean(Baseline)');
 elseif length(mean_baselines)>1 && length(std_baselines)>1
@@ -266,7 +286,7 @@ elseif length(mean_baselines)>1 && length(std_baselines)>1
     contour(std_baselines,mean_baselines, optimality_matrix,'color','k','linew',1.5,'ShowText','on');
     
 %     set(gca,'ytick',0:5:max(mean_baselines))
-    colormap(hot);
+    colormap(hot); caxis([50 100])
     xlabel('Std(Baseline)');
     ylabel('Mean(Baseline)');
 
@@ -285,15 +305,15 @@ end
 % --- Population activity
 % figure(1); clf; imagesc(tuning_theta(0)); colorbar
 
-example_time = round((150:200:time_max-200)/dt)+1;
+example_time = round((0.15:0.2:time_max-0.2)/dt)+1;
 thetas_stim = linspace(-pi,0,10); thetas_stim = [thetas_stim fliplr(-thetas_stim(2:end-1))];
 
 % --- Get all tuning curves. Because we have much more theta than t, I let thetas_stim be the vectorized term
 all_tunings = nan(nu_neuron,length(thetas_stim),length(example_time)); 
 for tt = 1:length(example_time)
-    all_tunings(:,:,tt) = (tuning_paras(:,1)*ones(1,length(thetas_stim))).* exp( (tuning_paras(:,2)*ones(1,length(thetas_stim))) ...
+    all_tunings(:,:,tt) = (Ai*ones(1,length(thetas_stim))).* exp( (ki*ones(1,length(thetas_stim))) ...
                .*(cos(theta_pref(:) * ones(1,length(thetas_stim)) - ones(length(theta_pref),1) * thetas_stim)-1)) ...
-               * speed_t(example_time(tt)) + repmat((1 - tuning_paras(:,3) * speed_t(example_time(tt))) .* tuning_paras(:,4),1,length(thetas_stim));
+               * speed_t(example_time(tt)) + repmat((1 - betai * speed_t(example_time(tt))) .* Bi,1,length(thetas_stim));
 end
 
 % --- Plot example spatial-temporal tuning curve ---
@@ -329,6 +349,7 @@ end
 
 % --- Averaged tuning curve with pref aligned to 0 ---
 n_average = 195;
+% n_average = nu_neuron;
 average_neuron = randperm(nu_neuron,n_average);
 
 all_tunings_align = nan(length(average_neuron),length(thetas_stim),length(example_time)); 

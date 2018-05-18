@@ -46,7 +46,7 @@ nsVAL2=ns2-nsTE1-nsTR2;
 % Initialize output variables
 FIVAL = NaN(1,NR);
 FITR = NaN(1,NR);
-for k=1:NR
+parfor k=1:NR
 
     idx=randperm(ns1);
     DTR1 = D1(idx(1:nsTR1),:);
@@ -111,6 +111,7 @@ for k=1:NR
     varVAL = w'*(cov(DVAL1)+cov(DVAL2))*w/2;
 % % %     FIVAL(k) = biasVAL^2/varVAL; %*** Original version by Jeff Beck
     FIVAL(k) = biasVAL^2/(varVAL*(nsVAL1+nsVAL2-2)/(nsVAL1+nsVAL2-4)) - 2/(0.5*(nsVAL1+nsVAL2)*ds^2); %*** 2014.04 RCC added: bias correction   
+    
 end
 
 

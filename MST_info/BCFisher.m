@@ -37,8 +37,15 @@ if(size(D2,2)~=N)
 end
 
 % If there are NaNs, subsample to make D1 and D2 same size
-ind1 = find(isnan(prod(D1,2)));
-ind2 = find(isnan(prod(D2,2)));
+
+% These two are not good because prod(D1,2) could be Inf or NaN even if there's no Inf or NaN in D !!!! (HH20180509, test under Matlab2017)
+% Also, the prod is too slow...
+% ind1 = find(isnan(prod(D1,2)));  
+% ind2 = find(isnan(prod(D2,2)));
+
+ind1 = find(any(isnan(D1),2));  
+ind2 = find(any(isnan(D2),2));  
+
 N1=numel(ind1);
 N2=numel(ind2);
 if(N1>0 || N2>0)
