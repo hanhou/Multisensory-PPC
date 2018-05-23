@@ -31,7 +31,8 @@ for k = 1:3
     mean_group_tuning_norm = mean(group_tuning_norm(:,:,:,this_sign),4);
     se_group_tuning_norm = std(group_tuning_norm(:,:,:,this_sign),[],4)/sqrt(n_sign(k));
     
-    % Calculate info loss using Alex's code
+    % Calculate info loss using Alex's code [See MST_Heter_Info_Loss_GroundTruth for full accounts of this issue]
+    %{
     progressbar();
     for cc = 1:length(this_sign)
         ind = this_sign(cc);
@@ -43,16 +44,20 @@ for k = 1:3
         group_info_loss{k}(cc) = info_loss(baseline_tc-real_baseline,amp_tc-real_baseline);
         progressbar(cc/length(this_sign));
     end
-    
+    %}
 end
 
 
 
 
 %% Plotting
+%%%%%%%%%%%%%%%%%%%%%
+time_range = 3:length(ROI)-3;
+%%%%%%%%%%%%%%%%%%%%%
+
 default_color_order = get(0,'defaultaxescolororder');
 color_order = colormap(jet);
-color_order = color_order(round(linspace(1,size(color_order,1),size(ROI,1)-1)),:);
+color_order = color_order(round(linspace(1,size(color_order,1),length(time_range))),:);
 
 set(0,'defaultaxescolororder',color_order);
 
@@ -62,7 +67,7 @@ xs = [-180:45:180]';
 
 for k = 1:3
     subplot(1,3,k);
-    errorbar(repmat(xs,1,size(mean_group_tuning,2)-1),mean_group_tuning(:,1:end-1,k),se_group_tuning(:,1:end-1,k),'linew',2);
+    errorbar(repmat(xs,1,length(time_range)),mean_group_tuning(:,time_range,k),se_group_tuning(:,time_range,k),'linew',2);
     hold on;
     title(['n=' num2str(n_sign(k))]);
     xlim([-200 200]);
@@ -70,22 +75,23 @@ for k = 1:3
     ylim([0 60]);
     %     plot(mean_group_tuning(:,end,k),'k','linew',2);
 end
-legend(num2str(ROI))
+legend(num2str(ROI(time_range,:)))
 
 % Norm
 figure(1619); clf;    set(gcf,'uni','norm','pos',[0.023        0.34       0.855       0.365]);
 for k = 1:3
     subplot(1,3,k);
-    errorbar(repmat(xs,1,size(mean_group_tuning,2)-1),mean_group_tuning_norm(:,1:end-1,k),se_group_tuning_norm(:,1:end-1,k),'linew',2);
+    errorbar(repmat(xs,1,length(time_range)),mean_group_tuning_norm(:,time_range,k),se_group_tuning_norm(:,time_range,k),'linew',2);
     hold on;
     title(['n=' num2str(n_sign(k))]);
     xlim([-200 200]);
     set(gca,'xtick',[-180:90:180]);
     %     plot(mean_group_tuning_norm(:,end,k),'k','linew',2);
 end
-legend(num2str(ROI))
+legend(num2str(ROI(time_range,:)))
 
 % Info_loss
+%{
 figure(1620); clf;    set(gcf,'uni','norm','pos',[0.023        0.34       0.855       0.365]);
 for k = 1:3
     subplot(1,3,k);
@@ -93,7 +99,7 @@ for k = 1:3
     title(['n=' num2str(n_sign(k))]);
     xlim([0 100]);
 end
-
+%}
 
 
 %% Gaussian
@@ -116,24 +122,31 @@ duration = paras{i,1};
 step=0.005;
 t = -0.4:step:duration+0.4;
 
+% delay = 0.14;
+delay = 0;
+
 ampl = paras{i,2};
 num_sigs = paras{i,3};
 
-pos=ampl*0.5*(erf((t-duration/2)/((duration/2/num_sigs)*sqrt(2))) + 1);  % Note that sigma = duration/2/num_of_sigma !!
+pos=ampl*0.5*(erf((t-duration/2-delay)/((duration/2/num_sigs)*sqrt(2))) + 1);  % Note that sigma = duration/2/num_of_sigma !!
 veloc = diff(pos)/step;
 
-figure(2237); subplot(1,2,1); 
+figure(2237); % subplot(1,2,1); 
 
 plot(t(1:length(t)-1),veloc,'k','linew',2);
-for rr = 1:length(ROI)-1
+
+i = 1;
+for rr = time_range
     hold on;
-    plot(ROI(rr,:)/1000,[-0.1 -0.1],'color',color_order(rr,:),'linew',9)
-    aver_speed(rr) = mean(veloc(ROI(rr,1)/1000<t & t< ROI(rr,2)/1000));
+    plot(ROI(rr,:)/1000,[-0.1 -0.1],'color',color_order(i,:),'linew',9)
+    i = i + 1;
+    % aver_speed(rr) = mean(veloc(ROI(rr,1)/1000<t & t< ROI(rr,2)/1000));
 end
 
+%{
 %======== Simple Simulation of Gain modulation
-color_order = colormap(jet);
-color_order = color_order(round(linspace(1,size(color_order,1),size(ROI,1))),:);
+% color_order = colormap(jet);
+% color_order = color_order(round(linspace(1,size(color_order,1),size(ROI,1))),:);
 
 set(0,'defaultaxescolororder',color_order);
 
@@ -153,5 +166,5 @@ set(gca,'xtick',[-180:90:180]);
 
 set(0,'defaultaxescolororder','default');
 
-
+%}
 
