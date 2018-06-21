@@ -34,14 +34,14 @@ end
 % 1. Tunings 
 nu_neurons = 1000;
 
-mean_baselines = 20;
-std_baselines = 20;
+mean_baselines = 60;
+std_baselines = 40;
 
 % Using gamma distribution to introduce heterogeneity
 gamma_para = [ % Mean   Std  (Desired)
-                47,    30;  % amp
+                100,    70;  % amp
                 1.7,   0.9;  % Controls sigma of spatial tuning: k = log(0.5)/(cos(degtorad(desired_half_width))-1)
-                0.7,   0.3; % beta
+                0.3,   0.2; % beta
                 mean_baselines,   std_baselines;  % original 20, 5
              ];
          
@@ -55,21 +55,21 @@ delay = 0.140;
 theta_stim = 0; % Calculate Info around 0 degree
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
 % ==== Scan nu_neurons ===
 %{
     nu_neurons = round(10.^linspace(1,log10(1000),10)) + 1; 
 %}
 
-
 % ==== Scan epsis and baseline ===
-%{
-    epsis = [0 10.^(linspace(-4,-2,15))];
-    mean_baselines = linspace(0,35,15);
-%}
-
+% %{
+    epsis = [0 10.^(linspace(-4,-2,10))];
+    mean_baselines = mean_baselines; % Only care about Fig.4
+    % mean_baselines = linspace(0,2*mean_baselines,5);  % Should be odd number because I'm gonna plot the mean(mean_baselines)!
+%} 
 
 % ==== Scan baseline and var_baseline ===
-% %{
+%{
     std_baselines = linspace(eps,40,15);
     mean_baselines = linspace(0,40,15);
 %}
@@ -79,7 +79,7 @@ if ION_cluster
     if length(nu_neurons)>1 % Scan 1-D nu_neuron
         nu_runs = 10;
     else % Scan 2-D
-        nu_runs = 10;
+        nu_runs = 2;
     end
 else
     nu_runs = 1;
@@ -137,11 +137,11 @@ for ee = 1:length(epsis) % Scan epsi
                 nu_neuron = nu_neurons(nn);
                 
                 % ---- Uniformly distrubuted preferred heading ----
-                theta_pref = linspace(-pi,pi,nu_neuron)';
+                %                 theta_pref = linspace(-pi,pi,nu_neuron)';
                 
-                % ---- Bias to +/- 90 degrees (Gu 2006) ---- [No changing of % recovery]
-                %                 theta_pref = [randn(1,round(nu_neuron/2))*(1.2*pi/4)-(pi/2) randn(1,nu_neuron-round(nu_neuron/2))*(1.2*pi/4)+(pi/2)]';
-                %                 theta_pref = mod(theta_pref,2*pi)-pi;
+                % ---- Bias to +/- 90 degrees (Gu 2006) ---- [Little changing of % recovery]
+                theta_pref = [randn(1,round(nu_neuron/2))*(1.2*pi/4)-(pi/2) randn(1,nu_neuron-round(nu_neuron/2))*(1.2*pi/4)+(pi/2)]';
+                theta_pref = mod(theta_pref,2*pi)-pi;
                 
                 fprintf('\nParameter scan %.2g%%: ',(count/(length(epsis)*length(mean_baselines)*length(nu_neurons)*length(std_baselines))*100));
                 
@@ -331,7 +331,7 @@ if length(nu_neurons) > 1
 end
 
 
-if length(mean_baselines)>1 && length(epsis)>1
+if length(epsis)>1
     
     % ========= Plot optimality matrix =========
     optimality_matrix = squeeze(optimality_matrix);
@@ -339,31 +339,35 @@ if length(mean_baselines)>1 && length(epsis)>1
     
     figure(13); clf; set(gcf,'uni','norm','pos',[0.004        0.29       0.987       0.438]);
     epsi_log_x = [3*log10(epsis(2))-2*log10(epsis(3)) log10(epsis(2:end))]; % Add one entry for epsi = 0
-    
-    subplot(1,3,1) % Optimality
-    imagesc(epsi_log_x,mean_baselines,optimality_matrix'); axis xy; hold on;
-    contour(epsi_log_x,mean_baselines, optimality_matrix','color','k','linew',1.5,'ShowText','on');
-    
     epsi_log_x_tick = [min(epsi_log_x) linspace(round(epsi_log_x(2)),round(max(epsi_log_x)),5)];
     epsi_log_x_label = [-inf epsi_log_x_tick(2:end)];
-    set(gca,'xtick',epsi_log_x_tick, 'xticklabel', epsi_log_x_label)
-    set(gca,'ytick',0:5:max(mean_baselines))
-    colormap(parula); caxis([50 100])
-    xlabel('log_{10}(\epsilon_0)');
-    ylabel('Mean(Baseline)');
     
-    subplot(1,3,2)  % Threshold
-    imagesc(epsi_log_x,mean_baselines, threshold_matrix'); axis xy; hold on;
-    contour(epsi_log_x,mean_baselines, threshold_matrix','color','k','linew',1.5,'ShowText','on');
-    
-    set(gca,'xtick',epsi_log_x_tick, 'xticklabel', epsi_log_x_label)
-    set(gca,'ytick',0:5:max(mean_baselines))
-    colormap(hot);
-    xlabel('log_{10}(\epsilon_0)');
-    ylabel('Mean(Baseline)');
+    if length(mean_baselines) > 1
+        
+        subplot(1,3,1) % Optimality
+        imagesc(epsi_log_x,mean_baselines,optimality_matrix'); axis xy; hold on;
+        contour(epsi_log_x,mean_baselines, optimality_matrix','color','k','linew',1.5,'ShowText','on');
+        
+        set(gca,'xtick',epsi_log_x_tick, 'xticklabel', epsi_log_x_label)
+        set(gca,'ytick',0:5:max(mean_baselines))
+        colormap(parula); caxis([50 100])
+        xlabel('log_{10}(\epsilon_0)');
+        ylabel('Mean(Baseline)');
+        
+        
+        subplot(1,3,2)  % Threshold
+        imagesc(epsi_log_x,mean_baselines, threshold_matrix'); axis xy; hold on;
+        contour(epsi_log_x,mean_baselines, threshold_matrix','color','k','linew',1.5,'ShowText','on');
+        
+        set(gca,'xtick',epsi_log_x_tick, 'xticklabel', epsi_log_x_label)
+        set(gca,'ytick',0:5:max(mean_baselines))
+        colormap(hot);
+        xlabel('log_{10}(\epsilon_0)');
+        ylabel('Mean(Baseline)');
+    end
     
     subplot(1,3,3)  % Threshold: prediction and simulation 
-    to_plot_baseline = 20;
+    to_plot_baseline = mean(mean_baselines); % 20
     [~, ind_baseline] = min(abs(to_plot_baseline - mean_baselines));
     
     optimality_to_plot_baseline = optimality_matrix(:,ind_baseline);
@@ -373,13 +377,13 @@ if length(mean_baselines)>1 && length(epsis)>1
     
     hold(ax(1),'on') ; delete(h1); 
     errorbar(ax(1), epsi_log_x, optimality_matrix(:,ind_baseline)', optimality_std_matrix(:,ind_baseline)','ro-','linew',2);
-    plot(ax(1),xlim,[100 100],'r--','linew',2);
     set(ax(1),'ytick',50:5:100); ylim(ax(1), [50 102]);
     
     hold(ax(2),'on');
     errorbar(ax(2), epsi_log_x, threshold_matrix(:,ind_baseline), threshold_std_matrix(:,ind_baseline),'ko-','linew',2)
     errorbar(ax(2), epsi_log_x, threshold_matrix(:,1), threshold_std_matrix(:,1),'bo-','linew',2)
-    legend({'thres\_predicted', 'thres (baseline 20)','thres (baseline 0)','optimality' })
+    legend({'optimality', 'thres\_inf&optimal', sprintf('thres (B=%g)',to_plot_baseline),'thres (B=0)', })
+    plot(ax(1),xlim,[100 100],'r--','linew',2);
     plot(xlim,[4 4],'--k'); 
    
     epsi_log_x_label = [-inf epsi_log_x_tick(2:end)];
@@ -387,6 +391,8 @@ if length(mean_baselines)>1 && length(epsis)>1
 
     axis(ax(2),'tight'); set(ax(2),'ytick',0:10)
     linkaxes(ax,'x');
+    set(ax(1),'ycolor','r')
+    set(ax(2),'ycolor','b')
     
     if ION_cluster
         saveas(13,'./4_Optimality_matrix_GroundTruth');
@@ -437,7 +443,7 @@ if length(nu_neurons) > 1
     % figure(1); clf; imagesc(tuning_theta(0)); colorbar
     
     example_time = round((0.15:0.2:time_max-0.2)/dt)+1;
-    thetas_stim = -pi:pi/4:0; thetas_stim = [thetas_stim fliplr(-thetas_stim(2:end-1))];
+    thetas_stim = -pi:pi/8:0; thetas_stim = [thetas_stim fliplr(-thetas_stim(2:end-1))];
     
     % --- Get all tuning curves. Because we have much more theta than t, I let thetas_stim be the vectorized term
     all_tunings = nan(nu_neuron,length(thetas_stim),length(example_time));
