@@ -51,6 +51,9 @@ spike_in_bin( spike_in_bin > 100 ) = 1; % something is absolutely wrong
 % -- Event data
 event_in_bin = squeeze(data.event_data(:,:,select_trials))';  % TrialNum * 5000
 
+% Get Coherence   20180603
+coherence = mean(data.moog_params(COHERENCE,:,1));
+
 %% ========== Calculate time-sliding tuning curves ===========
 
 % ------- Time-related -------
@@ -110,10 +113,16 @@ for k = 1:length(unique_stim_type)
     p_value(k) = anova1(raw_firing_for_p_value(:,:,k)','','off');
     
     % Wrap tuning curve so that pref is at the center
+    % The caveats is that the sampling should be uniform here!! (or using curve fitting first which I'm not willing to do so)
     pref_this_k = pref_az(k,end);
-    [~,ind] = min(abs(pref_this_k - unique_azimuth));
-    mean_firing_matrix_wrap(:,:,k) = circshift(mean_firing_matrix(:,:,k),length(unique_azimuth)/2+1-ind);
-    se_firing_matrix_wrap(:,:,k) = circshift(se_firing_matrix(:,:,k),length(unique_azimuth)/2+1-ind);
+    uniform_unique_azimuth = 0:45:315; % Downsample azimuths    
+    down_sampled_azimuth = ismember(unique_azimuth, uniform_unique_azimuth);
+    uniform_mean_firing_matrix = mean_firing_matrix(down_sampled_azimuth,:,k);
+    uniform_se_firing_matrix = se_firing_matrix(down_sampled_azimuth,:,k);
+        
+    [~,ind] = min(abs(pref_this_k - uniform_unique_azimuth));
+    mean_firing_matrix_wrap(:,:,k) = circshift(uniform_mean_firing_matrix, length(uniform_unique_azimuth)/2+1-ind);
+    se_firing_matrix_wrap(:,:,k) = circshift(uniform_se_firing_matrix, length(uniform_unique_azimuth)/2+1-ind);
 end
 
 mean_firing_matrix_wrap(end+1,:,:) = mean_firing_matrix_wrap(1,:,:);
@@ -125,7 +134,9 @@ for k = 1:length(unique_stim_type)
     errorbar(mean_firing_matrix_wrap(:,:,k),se_firing_matrix_wrap(:,:,k));
     hold on; 
     plot(mean_firing_matrix_wrap(:,end,k),'k','linew',2);
-    title(['p=' num2str(p_value(k))]);
+    title(sprintf('stim type = %g, p=%g', unique_stim_type(k), p_value(k)));
+    if unique_stim_type(k)==2,  ylabel(sprintf('Coherence = %g',coherence)), end
+   
 end
 set(gcf,'name',FILE);
 
@@ -147,7 +158,7 @@ result = PackResult(FILE, PATH, SpikeChan, unique_stim_type, Protocol, ... % Obl
     unique_azimuth, unique_elevation,...
     mean_firing_matrix_wrap, se_firing_matrix_wrap, ...
     mean_firing_matrix, se_firing_matrix, ...
-    pref_az, ROI, p_value ...
+    pref_az, ROI, p_value, coherence ...
     ); % model info
 
 config.suffix = 'ilPPC';

@@ -105,7 +105,7 @@ parfor k=1:NR
     varTR = w'*(cov(DTR1)+cov(DTR2))*w/2;
 % % %     FITR(k) = biasTR^2/varTR; %*** Original version by Jeff Beck
     FITR(k) = biasTR^2/(varTR*(nsTR1+nsTR2-2)/(nsTR1+nsTR2-4)) - 2/(0.5*(nsTR1+nsTR2)*ds^2); 
-    %*** 2014.04 RCC added: bias correction (Where is this from??? HH)
+    %*** 2014.04 RCC added: bias correction (Where is this last term from??? HH)
     
     biasVAL = (mean(DVAL2)-mean(DVAL1))*w/ds; 
     varVAL = w'*(cov(DVAL1)+cov(DVAL2))*w/2;
