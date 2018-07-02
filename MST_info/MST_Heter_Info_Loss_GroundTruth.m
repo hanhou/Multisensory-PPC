@@ -4,6 +4,7 @@
 % First by Han Hou @ 20180426,  houhan@gmail.com
 
 clear;
+rng('default');
 rng('shuffle');
 addpath(genpath('/home/hh/Multisensory-PPC/util'));
 
@@ -34,14 +35,18 @@ end
 % 1. Tunings 
 nu_neurons = 1000;
 
-mean_baselines = 60;
-std_baselines = 40;
+mean_baselines = 20;
+std_baselines = 20;
+
+mean_baselineDropRatioOfAi = 0.7;  % If not scan, this is real mean_beta. If scan, this will be the "baseline dropping ratio of Ai". 20180628
+
+ReLU = 0;  % Whether using ReLUs for each neuron to remove their minimal tuning curve. HH20180627
 
 % Using gamma distribution to introduce heterogeneity
 gamma_para = [ % Mean   Std  (Desired)
-                100,    70;  % amp
+                47,    30;  % amp
                 1.7,   0.9;  % Controls sigma of spatial tuning: k = log(0.5)/(cos(degtorad(desired_half_width))-1)
-                0.3,   0.2; % beta
+                mean_baselineDropRatioOfAi,   0.3; % beta
                 mean_baselines,   std_baselines;  % original 20, 5
              ];
          
@@ -62,7 +67,7 @@ theta_stim = 0; % Calculate Info around 0 degree
 %}
 
 % ==== Scan epsis and baseline ===
-% %{
+%{
     epsis = [0 10.^(linspace(-4,-2,10))];
     mean_baselines = mean_baselines; % Only care about Fig.4
     % mean_baselines = linspace(0,2*mean_baselines,5);  % Should be odd number because I'm gonna plot the mean(mean_baselines)!
@@ -74,6 +79,12 @@ theta_stim = 0; % Calculate Info around 0 degree
     mean_baselines = linspace(0,40,15);
 %}
 
+% ==== Scan baseline (fixed baseline*beta) and beta ===
+% %{
+    mean_baselineDropRatioOfAi = linspace(eps,1,15); %  If scan, this will be the "baseline dropping ratio". HH20180628
+    mean_baselines = linspace(eps,40,15);
+%}
+
 
 if ION_cluster
     if length(nu_neurons)>1 % Scan 1-D nu_neuron
@@ -82,7 +93,7 @@ if ION_cluster
         nu_runs = 2;
     end
 else
-    nu_runs = 1;
+    nu_runs = 5;
 end
 
 % --- Motion profile ---
@@ -109,148 +120,205 @@ count = 0;
 optimality_matrix = [];
 
 tic
-for ee = 1:length(epsis) % Scan epsi
-    epsilon_0 = epsis(ee);
-    for mbmb = 1:length(mean_baselines) % Scan baseline
-        for sbsb = 1:length(std_baselines) % Scan std_baseline
-            
-            % ======== Parameters =======
-            
-            % Override baseline
-            gamma_para(end,:) = [ mean_baselines(mbmb),  std_baselines(sbsb) ];  % original 20, 5
-            
-            % Override heterogeneity
-            %     gamma_para(:,2) = eps; % Turn off heterogeneity for test
-
-            gamma_A = (gamma_para(:,1)./gamma_para(:,2)).^2;
-            gamma_B = (gamma_para(:,1))./gamma_A;    gamma_B(isnan(gamma_B)) = 0;
-
-            I_0_optimal = nan(nu_runs, length(nu_neurons));
-            I_0_ilPPC = I_0_optimal;
-            I_epsi_optimal = I_0_optimal;
-            I_epsi_ilPPC = I_0_optimal;
-            
-            for nn = 1:length(nu_neurons)  % Scan nu_neurons
-                count = count + 1;
+for bebe = 1:length(mean_baselineDropRatioOfAi)
+    for ee = 1:length(epsis) % Scan epsi
+        epsilon_0 = epsis(ee);
+        for mbmb = 1:length(mean_baselines) % Scan baseline
+            for sbsb = 1:length(std_baselines) % Scan std_baseline
                 
-                % ======== Neurons and Times ========
-                nu_neuron = nu_neurons(nn);
+                % ======== Parameters =======
                 
-                % ---- Uniformly distrubuted preferred heading ----
-                %                 theta_pref = linspace(-pi,pi,nu_neuron)';
+                % Override baseline
+                gamma_para(end,:) = [ mean_baselines(mbmb),  std_baselines(sbsb) ];  % original 20, 5
                 
-                % ---- Bias to +/- 90 degrees (Gu 2006) ---- [Little changing of % recovery]
-                theta_pref = [randn(1,round(nu_neuron/2))*(1.2*pi/4)-(pi/2) randn(1,nu_neuron-round(nu_neuron/2))*(1.2*pi/4)+(pi/2)]';
-                theta_pref = mod(theta_pref,2*pi)-pi;
-                
-                fprintf('\nParameter scan %.2g%%: ',(count/(length(epsis)*length(mean_baselines)*length(nu_neurons)*length(std_baselines))*100));
-                
-                
-                %------------  Runs ------------
-                for rruns = 1:nu_runs
+                if length(mean_baselineDropRatioOfAi) > 1  % If scan BDROA, need to convert. Otherwise, not convert
+                    % Convert "baseline drop ratio of Ai" to real Bi
+                    mean_BDROA = mean_baselineDropRatioOfAi(bebe);
+                    mean_betaThis = gamma_para(1,1) * mean_BDROA / mean_baselines(mbmb); % We care about baseline drop ratio in respect to Ai, not Bi.
                     
-                    fprintf('>');
-                    
-                    tuning_paras = nan(nu_neuron,size(gamma_para,1));
-                    for pp = 1:size(gamma_para,1)
-                        tuning_paras(:,pp) = gamrnd(gamma_A(pp),gamma_B(pp),nu_neuron,1);
+                    if mean_betaThis > 1 % Baseline this is so small that BDROA cannot be reached
+                        count = count + 1;
+                        fprintf('\nParameter scan %.2g%%: ',(count/(length(mean_baselineDropRatioOfAi)* length(epsis)*length(mean_baselines)*length(nu_neurons)*length(std_baselines))*100));
+                        fprintf('Too small baseline')
+                        
+                        optimality_matrix(bebe,ee,mbmb,sbsb) = nan;
+                        optimality_std_matrix(bebe,ee,mbmb,sbsb) = nan;
+                        threshold_matrix(bebe,ee,mbmb,sbsb) =  nan;
+                        threshold_std_matrix(bebe,ee,mbmb,sbsb) = nan;
+                        
+                        continue;
                     end
                     
-                    Ai = tuning_paras(:,1);
-                    ki = tuning_paras(:,2);
-                    betai = tuning_paras(:,3);
-                    Bi = tuning_paras(:,4);
+                    std_betaThis = mean_betaThis / 0.7 * 0.3; % Scaled std in respect to the original (0.7, 0.3)
+                    gamma_para(3,:) = [ mean_betaThis,  std_betaThis ];  % original 20, 5
+                end
+                
+                % Override heterogeneity
+                %     gamma_para(:,2) = eps; % Turn off heterogeneity for test
+                
+                gamma_A = (gamma_para(:,1)./gamma_para(:,2)).^2;
+                gamma_B = (gamma_para(:,1))./gamma_A;    gamma_B(isnan(gamma_B)) = 0;
+                
+                I_0_optimal = nan(nu_runs, length(nu_neurons));
+                I_0_ilPPC = I_0_optimal;
+                I_epsi_optimal = I_0_optimal;
+                I_epsi_ilPPC = I_0_optimal;
+                
+                for nn = 1:length(nu_neurons)  % Scan nu_neurons
+                    count = count + 1;
                     
-                    betai(betai > 1) = 1; % beta should be smaller than 1
-                                        
-                    % To make sure the min peak is larger than (1 + min_signal_baseline_ratio)*Baseline
-%                     min_signal_baseline_ratio = 0.5;
-%                     to_trunc = find(Bi > Ai./(min_signal_baseline_ratio + betai));
-%                     Bi (to_trunc) = Ai(to_trunc)./(min_signal_baseline_ratio + betai(to_trunc));
+                    % ======== Neurons and Times ========
+                    nu_neuron = nu_neurons(nn);
                     
-                    % ========= Spatial-temporal tunings =======
-                    % [f]: Population activity as a function of stimulus theta. Baseline term accounts for what we found in Gu MST data
-                    %  f(theta,t) = amp * v(t) * exp {k*(cos(theta-theta_pref)-1)} + (1 - beta * v(t)/max(v)) * baseline
-                    tuning_theta = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)) * (speed_t) + ...
-                        (1 - betai * speed_t ) .* repmat(Bi,1,length(time));
-                    % [f']: Derivative of tuning
-                    tuning_theta_der = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)).* ...
-                        (ki .* sin(theta_pref - theta)) * speed_t;
-                    % -- Plot f'--
-                    % fp = tuning_theta_prime(0);
-                    % figure(); plot(theta_pref/pi*180,fp(:,1000))
+                    % ---- Uniformly distrubuted preferred heading ----
+                    %                 theta_pref = linspace(-pi,pi,nu_neuron)';
                     
-                    % ========== Adding Correlations =========                   
-                    resp = tuning_theta(theta_stim);
-                    resp_der = tuning_theta_der(theta_stim);
+                    % ---- Bias to +/- 90 degrees (Gu 2006) ---- [Little changing of % recovery]
+                    theta_pref = [randn(1,round(nu_neuron/2))*(1.2*pi/4)-(pi/2) randn(1,nu_neuron-round(nu_neuron/2))*(1.2*pi/4)+(pi/2)]';
+                    theta_pref = mod(theta_pref,2*pi)-pi;
                     
-                    C = (1-rho)*eye(nu_neuron) + rho*exp(k*(cos(theta_pref * ones(1,nu_neuron) - ones(nu_neuron,1) * theta_pref')-1)); % Correlation coefficient (Moreno 2014 NN)
+                    fprintf('\nParameter scan %.2g%%: ',(count/(length(mean_baselineDropRatioOfAi)* length(epsis)*length(mean_baselines)*length(nu_neurons)*length(std_baselines))*100));
                     
-                    SIGMA_0_ilPPC = zeros(nu_neuron,nu_neuron);
-                    SIGMA_epsi_ilPPC = zeros(nu_neuron,nu_neuron);
                     
-                    I_0_ts = nan(1,length(time));
-                    I_epsi_ts = nan(1,length(time));
-                    
-                    parfor tt = 1:length(time)    % Across all trial
-                        %     for tt = round(time_max/2/dt)  % Only one time point
-                        f = resp(:,tt);
-                        f_der = resp_der(:,tt);
+                    %------------  Runs ------------
+                    for rruns = 1:nu_runs
                         
-                        % ======= Time-dependent epsilon (after 20180426 Talk, see OneNote) ====
-                        epsi_this = epsilon_0 / (speed_t(tt) + eps);
+                        fprintf('>');
                         
-                        % ======= Add correlation ======
-                        % Exponentially decay correlation (non-differential in the heterogeneous case)
-                        SIGMA_0_ts = fano * C .* sqrt(f * f');
-                        
-                        % Total covariance matrix = SIGMA_0 + Differential Correlation
-                        SIGMA_epsi_ts = SIGMA_0_ts + epsi_this * (f_der * f_der');
-                        
-                        % ====== Compute Linear Fisher info directly by groud truth I = f'T SIGMA^-1 f' =====
-                        if norm(f_der) < eps
-                            I_0_ts(tt) = 0;
-                            I_epsi_ts(tt) = 0;
-                        else
-                            I_0_ts(tt) = f_der' * (SIGMA_0_ts \ f_der); % (A\b) is faster than inv(A)*b
-                            % I_epsi_ts(tt) = f_der' * inv(SIGMA_epsi_ts) * f_der;   % Could be replaced by the fact that I_epsi = I_0 / (1 + eta * I_0)
-                            I_epsi_ts(tt) = I_0_ts(tt) / (1 + epsi_this * I_0_ts(tt));
+                        tuning_paras = nan(nu_neuron,size(gamma_para,1));
+                        for pp = 1:size(gamma_para,1)
+                            tuning_paras(:,pp) = gamrnd(gamma_A(pp),gamma_B(pp),nu_neuron,1);
                         end
                         
-                        % ====== Adding momentary covariance matrix for ilPPC (assuming independent noise over time)
-                        SIGMA_0_ilPPC = SIGMA_0_ilPPC + SIGMA_0_ts;
-                        SIGMA_epsi_ilPPC = SIGMA_epsi_ilPPC + SIGMA_epsi_ts;
+                        Ai = tuning_paras(:,1);
+                        ki = tuning_paras(:,2);
+                        betai = tuning_paras(:,3);
+                        Bi = tuning_paras(:,4);
+                        
+                        % Introduce correlation between Ai and Bi (stupid method)
+                        %{
+                    [~ ,sortAiId] = sort(Ai);
+                    sortBi = sort(Bi);
+                    newBi = sort(Bi);
+                    
+                    slidingWinWid = round(nu_neuron/5);
+                    slidingWinStep = round(nu_neuron/10);
+                    slidingBeg = 1;
+                    while slidingBeg + slidingWinWid - 1 <= nu_neuron
+                        randpermThis = randperm(slidingWinWid);
+                        newBi(slidingBeg : slidingBeg + slidingWinWid - 1) = sortBi(slidingBeg + randpermThis - 1);
+                        slidingBeg = slidingBeg + slidingWinStep;
                     end
+                    Bi(sortAiId) = newBi;
                     
-                    % ======= 1. Sum of all momentary info (standard of optimality) ========
-                    I_0_optimal(rruns, nn) = sum(I_0_ts) * dt;  % Area under momentary info (so that total info does not dependent on dt)
-                    I_epsi_optimal(rruns, nn) = sum(I_epsi_ts) * dt;
-                    
-                    %     % For checking momentary info temporally
-                    %         I_0_optimal(nn) = I_0_ts(round(time_max/2/dt));
-                    %         I_epsi_optimal(nn) = I_epsi_ts(round(time_max/2/dt));
-                    
-                    % ======= 2. Info of straight sum of spikes (ilPPC) ========
-                    f_der_ilPPC = sum(resp_der,2);
-                    
-                    I_0_ilPPC(rruns, nn) = f_der_ilPPC' * (SIGMA_0_ilPPC \ f_der_ilPPC) * dt;
-                    I_epsi_ilPPC(rruns, nn) = f_der_ilPPC' * (SIGMA_epsi_ilPPC \ f_der_ilPPC) * dt;
+                    r = corr(Ai,Bi,'type','Spearman');
+                    figure(5); clf; plot(Ai,Bi,'o'); title(sprintf('r = %g',r))
+                    drawnow
+                        %}
+                        
+                        betai(betai > 1) = 1; % beta should be smaller than 1
+                        
+                        % To make sure the min peak is larger than (1 + min_signal_baseline_ratio)*Baseline
+                        %                     min_signal_baseline_ratio = 0.5;
+                        %                     to_trunc = find(Bi > Ai./(min_signal_baseline_ratio + betai));
+                        %                     Bi (to_trunc) = Ai(to_trunc)./(min_signal_baseline_ratio + betai(to_trunc));
+                        
+                        % ========= Spatial-temporal tunings =======
+                        % [f]: Population activity as a function of stimulus theta. Baseline term accounts for what we found in Gu MST data
+                        %  f(theta,t) = amp * v(t) * exp {k*(cos(theta-theta_pref)-1)} + (1 - beta * v(t)/max(v)) * baseline
+                        tuning_theta = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)) * (speed_t) + ...
+                            (1 - betai * speed_t ) .* repmat(Bi,1,length(time));
+                        
+                        % Override tuning baseline (Assuming we use ReLUs for each neuron to remove their minimal tuning curve) HH20180627
+                        % %{
+                        if ReLU
+                            tuning_theta = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)) * (speed_t) + ...
+                                (1 - betai * speed_t ) .* repmat(Bi,1,length(time)) ...
+                                - repmat((Ai .* exp(-2*ki) < betai.* Bi).* (Ai.*exp(-2*ki) * max(speed_t) + (1 - betai * max(speed_t)) .* Bi) ...  % If normal baseline Ai*exp(-2ki) < betai*Bi
+                                + (Ai .* exp(-2*ki) >= betai.* Bi).* Bi, ...
+                                1,length(time));  % If the original baseline moves upwards
+                        end
+                        %}
+                        
+                        % [f']: Derivative of tuning
+                        tuning_theta_der = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)).* ...
+                            (ki .* sin(theta_pref - theta)) * speed_t;
+                        % -- Plot f'--
+                        % fp = tuning_theta_prime(0);
+                        % figure(); plot(theta_pref/pi*180,fp(:,1000))
+                        
+                        % ========== Adding Correlations =========
+                        resp = tuning_theta(theta_stim);
+                        resp_der = tuning_theta_der(theta_stim);
+                        
+                        C = (1-rho)*eye(nu_neuron) + rho*exp(k*(cos(theta_pref * ones(1,nu_neuron) - ones(nu_neuron,1) * theta_pref')-1)); % Correlation coefficient (Moreno 2014 NN)
+                        
+                        SIGMA_0_ilPPC = zeros(nu_neuron,nu_neuron);
+                        SIGMA_epsi_ilPPC = zeros(nu_neuron,nu_neuron);
+                        
+                        I_0_ts = nan(1,length(time));
+                        I_epsi_ts = nan(1,length(time));
+                        
+                        for tt = 1:length(time)    % Across all trial
+                            %     for tt = round(time_max/2/dt)  % Only one time point
+                            f = resp(:,tt);
+                            f_der = resp_der(:,tt);
+                            
+                            % ======= Time-dependent epsilon (after 20180426 Talk, see OneNote) ====
+                            epsi_this = epsilon_0 / (speed_t(tt) + eps);
+                            
+                            % ======= Add correlation ======
+                            % Exponentially decay correlation (non-differential in the heterogeneous case)
+                            SIGMA_0_ts = fano * C .* sqrt(f * f');
+                            
+                            % Total covariance matrix = SIGMA_0 + Differential Correlation
+                            SIGMA_epsi_ts = SIGMA_0_ts + epsi_this * (f_der * f_der');
+                            
+                            % ====== Compute Linear Fisher info directly by groud truth I = f'T SIGMA^-1 f' =====
+                            if norm(f_der) < eps
+                                I_0_ts(tt) = 0;
+                                I_epsi_ts(tt) = 0;
+                            else
+                                I_0_ts(tt) = f_der' * (SIGMA_0_ts \ f_der); % (A\b) is faster than inv(A)*b
+                                % I_epsi_ts(tt) = f_der' * inv(SIGMA_epsi_ts) * f_der;   % Could be replaced by the fact that I_epsi = I_0 / (1 + eta * I_0)
+                                I_epsi_ts(tt) = I_0_ts(tt) / (1 + epsi_this * I_0_ts(tt));
+                            end
+                            
+                            % ====== Adding momentary covariance matrix for ilPPC (assuming independent noise over time)
+                            SIGMA_0_ilPPC = SIGMA_0_ilPPC + SIGMA_0_ts;
+                            SIGMA_epsi_ilPPC = SIGMA_epsi_ilPPC + SIGMA_epsi_ts;
+                        end
+                        
+                        % ======= 1. Sum of all momentary info (standard of optimality) ========
+                        I_0_optimal(rruns, nn) = sum(I_0_ts) * dt;  % Area under momentary info (so that total info does not dependent on dt)
+                        I_epsi_optimal(rruns, nn) = sum(I_epsi_ts) * dt;
+                        
+                        %     % For checking momentary info temporally
+                        %         I_0_optimal(nn) = I_0_ts(round(time_max/2/dt));
+                        %         I_epsi_optimal(nn) = I_epsi_ts(round(time_max/2/dt));
+                        
+                        % ======= 2. Info of straight sum of spikes (ilPPC) ========
+                        f_der_ilPPC = sum(resp_der,2);
+                        
+                        I_0_ilPPC(rruns, nn) = f_der_ilPPC' * (SIGMA_0_ilPPC \ f_der_ilPPC) * dt;
+                        I_epsi_ilPPC(rruns, nn) = f_der_ilPPC' * (SIGMA_epsi_ilPPC \ f_der_ilPPC) * dt;
+                        
+                    end
+                    %------------ End Runs ------------
                     
                 end
-                %------------ End Runs ------------
                 
+                if length(nu_neurons) == 1  % Optimality_matrix will never nested with nu_neurons
+                    optimality_matrix(bebe,ee,mbmb,sbsb) = mean(I_epsi_ilPPC./I_epsi_optimal,1)*100;
+                    optimality_std_matrix(bebe,ee,mbmb,sbsb) = std(I_epsi_ilPPC./I_epsi_optimal,[],1)*100;
+                    threshold_matrix(bebe,ee,mbmb,sbsb) =  mean(sqrt(2./I_epsi_ilPPC(:,end))/pi*180,1);
+                    threshold_std_matrix(bebe,ee,mbmb,sbsb) = std(sqrt(2./I_epsi_ilPPC(:,end))/pi*180,[],1);
+                end
+                
+                %             if isnan(optimality_matrix(ee,mbmb,sbsb))
+                %                 keyboard;
+                %             end
             end
-            
-            if length(nu_neurons) == 1  % Optimality_matrix will never nested with nu_neurons
-                optimality_matrix(ee,mbmb,sbsb) = mean(I_epsi_ilPPC./I_epsi_optimal,1)*100;
-                optimality_std_matrix(ee,mbmb,sbsb) = std(I_epsi_ilPPC./I_epsi_optimal,[],1)*100;
-                threshold_matrix(ee,mbmb,sbsb) =  mean(sqrt(2./I_epsi_ilPPC(:,end))/pi*180,1);
-                threshold_std_matrix(ee,mbmb,sbsb) = std(sqrt(2./I_epsi_ilPPC(:,end))/pi*180,[],1);
-            end
-            
-            %             if isnan(optimality_matrix(ee,mbmb,sbsb))
-            %                 keyboard;
-            %             end
         end
     end
 end
@@ -268,7 +336,7 @@ psycho_pred = rad2deg(sqrt(1./info_pred) * sqrt(2)); % Fine discrimination thres
 
 % ====== Plot momentary information ========
 
-if length(nu_neurons) > 1
+if length(nu_neurons) > 1  % 1-D Scan number of neurons
     % %{
     figure(10); plot(time,I_0_ts,'r','linew',2)
     hold on; plot(time,I_epsi_ts,'b','linew',2);
@@ -331,7 +399,7 @@ if length(nu_neurons) > 1
 end
 
 
-if length(epsis)>1
+if length(epsis)>1  % 2-D Scan, include epsi, plotting psychometric thresholds
     
     % ========= Plot optimality matrix =========
     optimality_matrix = squeeze(optimality_matrix);
@@ -399,7 +467,7 @@ if length(epsis)>1
     end
     
     
-elseif length(mean_baselines)>1 && length(std_baselines)>1
+elseif length(mean_baselines)>1 && length(std_baselines)>1   % 2-D Scan of mean_baseline and std_baseline
     
     % ========= Plot optimality matrix =========
     optimality_matrix = squeeze(optimality_matrix);
@@ -430,6 +498,37 @@ elseif length(mean_baselines)>1 && length(std_baselines)>1
         saveas(13,'./4_Optimality_matrix_GroundTruth');
     end
     
+elseif length(mean_baselines) > 1 && length(mean_baselineDropRatioOfAi) > 1  % 2-D Scan of mean_baseline and BDROA. HH20180628 Chengdu
+    
+    % ========= Plot optimality matrix =========
+    optimality_matrix = squeeze(optimality_matrix);
+    threshold_matrix = squeeze(threshold_matrix);
+    
+    figure(13); clf;  set(gcf,'uni','norm','pos',[0.118       0.333       0.726       0.453]);
+    
+    subplot(1,2,1)
+    imagesc(mean_baselines,mean_baselineDropRatioOfAi, optimality_matrix); axis xy; hold on;
+    contour(mean_baselines,mean_baselineDropRatioOfAi, optimality_matrix,'color','k','linew',1.5,'ShowText','on');
+    
+    %     set(gca,'ytick',0:5:max(mean_baselines))
+    colormap(parula); % caxis([50 100])
+    xlabel('Mean(Baseline)');
+    ylabel('Mean(BDROA)');
+    
+    subplot(1,2,2)
+    imagesc(mean_baselines,mean_baselineDropRatioOfAi, threshold_matrix); axis xy; hold on;
+    contour(mean_baselines,mean_baselineDropRatioOfAi, threshold_matrix,'color','k','linew',1.5,'ShowText','on');
+    
+    %     set(gca,'ytick',0:5:max(mean_baselines))
+    % caxis([50 100])
+    xlabel('Mean(Baseline)');
+    ylabel('Mean(BDROA)');
+    
+    
+    if ION_cluster
+        saveas(13,'./4_Optimality_matrix_GroundTruth');
+    end
+    
 end
 
 
@@ -451,7 +550,20 @@ if length(nu_neurons) > 1
         all_tunings(:,:,tt) = (Ai*ones(1,length(thetas_stim))).* exp( (ki*ones(1,length(thetas_stim))) ...
             .*(cos(theta_pref(:) * ones(1,length(thetas_stim)) - ones(length(theta_pref),1) * thetas_stim)-1)) ...
             * speed_t(example_time(tt)) + repmat((1 - betai * speed_t(example_time(tt))) .* Bi,1,length(thetas_stim));
+        
+        
+        if ReLU
+            % Override tuning baseline (Assuming we use ReLUs for each neuron to remove their minimal tuning curve) HH20180627
+            %%{
+            % Note that for some cells whose Ai * exp(-2*ki) > betai * Bi, the minimal baseline to remove should be exactly Bi
+            all_tunings(:,:,tt) = all_tunings(:,:,tt) - repmat(...
+                (Ai.*exp(-2*ki) < betai.*Bi) .* (Ai .* exp(-2 * ki) * max(speed_t) + (1 - betai * max(speed_t)) .* Bi) + ...
+                (Ai.*exp(-2*ki) >= betai.*Bi) .* Bi, ...
+                1, length(thetas_stim));
+            %}
+        end
     end
+
     
     % --- Plot example spatial-temporal tuning curve ---
     n_example = 45;
@@ -471,7 +583,8 @@ if length(nu_neurons) > 1
         subplot(5,9,i); hold on;
         set(gca,'colororder',color_order);
         plot([thetas_stim/pi*180 180], [this_tuning_align; this_tuning_align(1,:)],'linew',2);
-        title(sprintf('%0.1f/',tuning_paras(example_neuron(i),:)));
+        % title(sprintf('%0.1f/',tuning_paras(example_neuron(i),:)));
+        title(sprintf('%.1f/%.1f/%.1f/%.1f',Ai(example_neuron(i)),ki(example_neuron(i)),betai(example_neuron(i)),Bi(example_neuron(i))));
         axis tight; ylim([0 max(ylim)*1.1])
         xlim([-180 180])
         set(gca,'xtick',-180:90:180); set(gca,'color',[0.8 0.8 0.8])
@@ -530,6 +643,7 @@ set(findall(gcf,'type','axes'),'Ylim',[0 ylnew]);
     
     subplot(2,4,8);
     hist(betai,30); title('beta');
+    xlim([0 1])
     
     if ION_cluster
         file_name = sprintf('./3_average tuning');

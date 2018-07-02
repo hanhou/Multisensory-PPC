@@ -6,7 +6,7 @@
 % lip_HH(para_override)
 % para_override: {'name1',value1; 'name2',value2, ...}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function result = lip_HH(para_override,output_result)
+function userResult = lip_HH(para_override,output_result)
 %clear
 %clear global
 
@@ -21,7 +21,8 @@ hostname = char( getHostName( java.net.InetAddress.getLocalHost)); % Get host na
 
 if ~isempty(strfind(hostname,'node')) || ~isempty(strfind(hostname,'clc')) % contains(hostname,{'node','clc'})  % ION cluster;
     if isempty(gcp('nocreate'))
-        parpool(hostname(1:strfind(hostname,'.')-1),20);
+        % parpool(hostname(1:strfind(hostname,'.')-1),20);
+        parpool('local',20);
     end
     ION_cluster = 1;
 else % My own computer
@@ -58,20 +59,25 @@ h_grouped = [];
 % ============ Sizes ============
 % Input layers
 N_targets = 2; % Target input
-N_vis = 200; % Visual motion signal
-N_vest = 200; % Vestibular motion signal
-
-% Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
-% This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
-% which has a short time constant, keeps receiving target input but does not integrate it.
-% For most part of the code, I just rename the old "_lip" stuff to "_int"
-N_int = 300;
-N_lip = 300;  % Output layers (Real LIP layer)
 
 % ============ Times ============
 if ION_cluster
+    N_vis = 100; % Visual motion signal
+    N_vest = 100; % Vestibular motion signal
+    
+    % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
+    % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
+    % which has a short time constant, keeps receiving target input but does not integrate it.
+    % For most part of the code, I just rename the old "_lip" stuff to "_int"
+    N_int = 200;
+    N_lip = 200;  % Output layers (Real LIP layer)
     dt = 2e-3; % Size of time bin in seconds
 else
+    N_vis = 100; % Visual motion signal
+    N_vest = 100; % Vestibular motion signal
+    
+    N_int = 100;
+    N_lip = 100;  % Output layers (Real LIP layer)
     dt = 5e-3;
 end
 trial_dur_total = 1.7; % in s
@@ -163,7 +169,7 @@ time_const_int = 10000e-3; % in s
 time_const_lip = 100e-3; % in s
 
 % ---- Visual to INTEGRATOR ----
-g_w_int_vest = 20; % Let's vary the gain separately
+g_w_int_vest = 20; % Let's vary the gain separately`
 g_w_int_vis = 20; 
 dc_w_int_vis = 0;
 k_int_vis = 4; % Larger, narrower
@@ -564,13 +570,13 @@ else
         
         % %{
         % Just to verify the distribution of diagonals of w_lip_lip
-        result.w_lip_lip = w_lip_lip;
+        % userResult.w_lip_lip = w_lip_lip;
         
         figure(1318); clf; hold on;
         delta_theta = 0;
         
-        off_diag = round(delta_theta/(360/size(result.w_lip_lip,1)));
-        x = diag(result.w_lip_lip,off_diag);
+        off_diag = round(delta_theta/(360/size(w_lip_lip,1)));
+        x = diag(w_lip_lip,off_diag);
         
         if range(x)>0
             [N,edges] = hist(x,min(x):0.0003:max(x));
@@ -786,6 +792,11 @@ aux_proba_target(:,1:round(stim_on_time/dt)) = 1.7*aux_proba_target(:,1:round(st
 parfor_progress(n_parfor_loops);
 
 parfor tt = 1:n_parfor_loops % For each trial
+
+    % I realize that I should set random seed for each parallel workers! (set at the beginning of the file does not count)
+    % Otherwise, the workers are using actually the same series of random numbers across trials, which will lead to "bumps" in PSTH
+    % HH20180622
+    rand('state',sum(100*clock));
     
     % -- Get data from cheat sheet --
     cond_this = ss_hh_cheatsheet(tt,:);
@@ -978,12 +989,14 @@ AnalyzeResult;
 %% Save result
 if nargin == 2 % Save result
     for rr = 1:length(output_result)
-        eval(['result.(output_result{rr}) =' output_result{rr}]);
+        eval(['userResult.(output_result{rr}) =' output_result{rr}]);
     end
-    save(sprintf('./result/%sresults.mat',save_folder),'weights_saved','paras','result');
 else
-    save(sprintf('./result/%sresults.mat',save_folder),'weights_saved','paras');
+    userResult = [];
 end
+
+save(sprintf('./result/%sresults.mat',save_folder),'userResult',...
+                'weights_saved','paras','diff_PSTH_correct_mean_headings');  % Mandatory
 
 if ~ION_cluster
     tmp1 = whos;

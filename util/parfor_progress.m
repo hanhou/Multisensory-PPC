@@ -80,7 +80,12 @@ else
     if nargout == 0
         perc = sprintf('%3.0f%%%%', percent); % 4 characters wide, percentage
 %         disp([repmat(char(8), 1, (w+9)), char(10), perc, '[', repmat('=', 1, round(percent*w/100)), '>', repmat(' ', 1, w - round(percent*w/100)), ']']);
-        fprintf([repmat('\b',1, (w+9)),'\n']);
-        fprintf([perc, '[', repmat('=', 1, round(percent*w/100)), '>', repmat(' ', 1, w - round(percent*w/100)), ']']);
+        
+        if ~isempty(strfind(hostname,'node')) || ~isempty(strfind(hostname,'clc'))
+            fprintf([repmat('\b',1, (w+9)),'\n']);
+            fprintf([perc, '[', repmat('=', 1, round(percent*w/100)), '>', repmat(' ', 1, w - round(percent*w/100)), ']']);
+        else
+            disp([repmat(char(8), 1, (w+9)), char(10), perc, '[', repmat('=', 1, round(percent*w/100)), '>', repmat(' ', 1, w - round(percent*w/100)), ']']);
+        end
     end
 end
