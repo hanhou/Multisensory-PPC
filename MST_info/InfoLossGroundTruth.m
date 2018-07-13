@@ -14,6 +14,7 @@ nu_neuron = 1000;
 % mean_baselineDropRatioOfAi = 0.7;  % If not scan, this is real mean_beta. If scan, this will be the "baseline dropping ratio of Ai". 20180628
 
 ReLU = 0;  % Whether using ReLUs for each neuron to remove their minimal tuning curve. HH20180627
+           % Add ReLU = 2: remove to B; ReLU = 1: remove to (1-beta)*B
 plotTuning = 0;
 
 % Using gamma distribution to introduce heterogeneity
@@ -21,6 +22,13 @@ A_mean = 47;   A_std = 30;
 k_mean = 1.7;  k_std = 0.9;
 beta_mean = 0.7;   beta_std = 0.3;
 B_mean = 20;    B_std = 20;
+
+% For keepStdMeanRatio
+A_mean_default = A_mean;   A_std_default = A_std;
+k_mean_default = k_mean;  k_std_default = k_std;
+beta_mean_default = beta_mean;   beta_std_default = beta_std;
+B_mean_default = B_mean;    B_std_default = B_std;
+
 
 % 2. Correlations
 rho = 0.2;  k = 2;  fano = 1;  % Decay correlation
@@ -30,6 +38,7 @@ epsilon_0 = 0.00139; % f'f'T  Corresponds to threshold ~= 4 degree. Original 0.0
 NumOfSigma = 3.5;
 delay = 0.140;
 theta_stim = 0; % Calculate Info around 0 degree
+keepStdMeanRatio = 0; % Automatically keep std/mean ratio the same as the defaults (HH20180712)
 
 % --- Motion profile ---
 time_max = 2; % s
@@ -72,6 +81,12 @@ if nargin == 1
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+if keepStdMeanRatio
+    A_std = A_std_default * A_mean / A_mean_default;
+    k_std = k_std_default * k_mean / k_mean_default;
+    beta_std = beta_std_default * beta_mean / beta_mean_default;
+    B_std = B_std_default * beta_mean / B_mean_default;
+end
 
 % Finalize tuning parameters
 gamma_para = [ % Mean   Std  (Desired)
@@ -142,16 +157,20 @@ tuning_theta = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)) * (speed_t) + 
 
 % Override tuning baseline (Assuming we use ReLUs for each neuron to remove their minimal tuning curve) HH20180627
 % %{
-if ReLU
+if ReLU == 1 % Remove to (1-beta)*B
     tuning_theta = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)) * (speed_t) + ...
         (1 - betai * speed_t ) .* repmat(Bi,1,length(time)) ...
         - repmat((Ai .* exp(-2*ki) < betai.* Bi).* (Ai.*exp(-2*ki) * max(speed_t) + (1 - betai * max(speed_t)) .* Bi) ...  % If normal baseline Ai*exp(-2ki) < betai*Bi
-        + (Ai .* exp(-2*ki) >= betai.* Bi).* Bi, ...
-        1,length(time));  % If the original baseline moves upwards
+        + (Ai .* exp(-2*ki) >= betai.* Bi).* Bi, ...   % If the original baseline moves upwards
+        1,length(time));  
+elseif ReLU == 2 % Remove to B (cut off some of the null tuning)
+    tuning_theta = @(theta) max(eps, Ai.* exp(ki.*(cos(theta_pref - theta)-1)) * (speed_t) + ...
+        (1 - betai * speed_t ) .* repmat(Bi,1,length(time)) ...
+        - repmat(Bi, 1, length(time)));
 end
 %}
 
-% [f']: Derivative of tuning
+% [f']: Derivative of tuning (independent of ReLU)
 tuning_theta_der = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)).* ...
     (ki .* sin(theta_pref - theta)) * speed_t;
 % -- Plot f'--
@@ -242,7 +261,7 @@ if plotTuning
             .*(cos(theta_pref(:) * ones(1,length(thetas_stim)) - ones(length(theta_pref),1) * thetas_stim)-1)) ...
             * speed_t(example_time(tt)) + repmat((1 - betai * speed_t(example_time(tt))) .* Bi,1,length(thetas_stim));
         
-        if ReLU
+        if ReLU == 1  % Move to (1-beta)*B
             % Override tuning baseline (Assuming we use ReLUs for each neuron to remove their minimal tuning curve) HH20180627
             %%{
             % Note that for some cells whose Ai * exp(-2*ki) > betai * Bi, the minimal baseline to remove should be exactly Bi
@@ -251,6 +270,8 @@ if plotTuning
                 (Ai.*exp(-2*ki) >= betai.*Bi) .* Bi, ...
                 1, length(thetas_stim));
             %}
+        elseif ReLU == 2  % Move to B
+            all_tunings(:,:,tt) = max(eps, all_tunings(:,:,tt) - repmat(Bi, 1, length(thetas_stim)));
         end
     end
     

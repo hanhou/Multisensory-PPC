@@ -24,16 +24,19 @@ else
     nu_runs = 3;
 end
 
+nu_neuron = 1000;
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % doScan = 'Scan Number of Neurons';
-doScan = 'Scan epsis and baseline';
-% doScan = 'Scan general linear 2-D';
+% doScan = 'Scan epsis and baseline';
+doScan = 'Scan general linear 2-D';
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 switch doScan
     case 'Scan Number of Neurons'
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         nu_neurons = round(10.^linspace(1,log10(1000),10)) + 1;
+        ReLU = 0;
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         
         % Linearize parameters
@@ -45,13 +48,17 @@ switch doScan
         
         parfor_progress(size(paras,1));  tic
         parfor pp = 1:size(paras,1)
-            result = InfoLossGroundTruth(paras(pp,:));
+            result = InfoLossGroundTruth([paras(pp,:), 'ReLU', ReLU]);
             
             infos(pp,:) = cellfun(@(x)result.(x),{'I_0_optimal','I_0_ilPPC','I_epsi_optimal','I_epsi_ilPPC',...
                                                   'I_epsi_Saturation', 'psycho_Saturation', 'psycho_ilPPC'});
             parfor_progress();
         end
         parfor_progress(0);   toc
+        
+        % Plot example tuning using the last condition
+        InfoLossGroundTruth([paras(end,:),'ReLU',ReLU, 'plotTuning',1]);
+
         
         I_0_optimal = reshape(infos(:,1),[],nu_runs)';
         I_0_ilPPC = reshape(infos(:,2),[],nu_runs)';
@@ -117,6 +124,8 @@ switch doScan
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         epsis = [0 10.^(linspace(-4,-2,10))];
         mean_baselines = linspace(eps,40,9);  % Should be odd number because I'm gonna plot the mean(mean_baselines)!
+        keepStdMeanRatio = 1;
+        ReLU = 0;
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         
         % Linearize parameters
@@ -130,13 +139,16 @@ switch doScan
         
         parfor_progress(size(paras,1));   tic
         parfor pp = 1:size(paras,1)
-            result = InfoLossGroundTruth([paras(pp,:),'nu_neuron', 1000]);
+            result = InfoLossGroundTruth([paras(pp,:),'nu_neuron', nu_neuron, 'keepStdMeanRatio',keepStdMeanRatio,'ReLU',ReLU]);
             
             infos(pp,:) = cellfun(@(x)result.(x),{'I_0_optimal','I_0_ilPPC','I_epsi_optimal','I_epsi_ilPPC',...
                                                   'I_epsi_Saturation', 'psycho_Saturation', 'psycho_ilPPC'});
             parfor_progress();
         end
         parfor_progress(0);   toc
+        
+        % Plot example tuning using the "middle" condition
+        InfoLossGroundTruth([paras(round(end/2),:),'nu_neuron',nu_neuron,'keepStdMeanRatio',keepStdMeanRatio,'ReLU',ReLU, 'plotTuning',1]);
         
         % --- Fetch data ---
         I_0_optimal = reshape(infos(:,1),size(xx,1),size(xx,2),nu_runs);
@@ -216,36 +228,87 @@ switch doScan
 
     case 'Scan general linear 2-D'
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        selectScan2D = 2;
+        selectScan2D = 6;
+        
+        % Automatically keep std ratio
+        if selectScan2D > 1  % When not scanning std per se
+            keepStdMeanRatio = 1;
+%             keepStdMeanRatio = 0;
+        end        
+        
+        ReLU = 1;
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        
         scan2D = {    % Variable         Scan             Note
-            {  
+            {    % 1. Baseline Mean vs Baseline Std
             'B_std',  linspace(eps,40,10), 'stdBaseline';
             'B_mean', linspace(0,40,11), 'meanBaseline';
             }
-            {
-            'B_mean', linspace(0,40,11), 'meanBaseline';
-            'BDROA',  linspace(eps,1,15), 'meanBDROA';
+            {    % 2. Baseline/A vs Drop/A
+            '', linspace(eps,1,10), 'meanBaseline/A';
+            '',  linspace(eps,1,10), 'meanDrop/A';
+            }
+            {    % 3. Baseline/A vs A
+            '',  linspace(eps,1,10), 'meanBaseline/A';
+            'A_mean', linspace(10,100,10), 'Amplitude';
+            }
+            {    % 4. Drop/A vs A
+            '',  linspace(eps,1,10), 'meanDrop/A';
+            'A_mean', linspace(10,100,10), 'Amplitude';
+            }
+            {    % 5. beta vs A 
+            'beta_mean', linspace(eps,1,10), 'beta';
+            'A_mean', linspace(10,100,10), 'Amplitude';
+            }
+            {    % 6. Baseline vs Amp
+            'B_mean', linspace(5,100,10), 'Baseline';
+            'A_mean', linspace(5,100,10), 'Amplitude';
+            }
+            {    % 7. Baseline/A^2 vs A
+            '',  linspace(eps,0.3,10), 'meanBaseline/A^2';
+            'A_mean', linspace(10,100,10), 'Amplitude';
             }
             };
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+        % Default values
+        A_mean_default = 47;      A_std_default = 30;
+        beta_mean_default = 0.7;   beta_std_default = 0.3;
+        B_mean_default = 20;   B_std_default = 20;
+        
         
         % Linearize parameters
         xs = scan2D{selectScan2D}{1,2};
         ys = scan2D{selectScan2D}{2,2};
         [xx, yy] = meshgrid(xs, ys);
         
-        if selectScan2D == 2
-            A_mean = 47;    beta_mean = 0.7;   beta_std = 0.3;
-            beta_means = A_mean * yy ./ xx; % We care about baseline drop ratio in respect to Ai, not Bi.
+        
+        if selectScan2D == 2  % 2. Baseline/A vs Drop /A
+            B_means = xx * A_mean_default;
+            beta_means = yy ./ xx; % We care about baseline drop ratio in respect to Ai, not Bi.
+            beta_means(beta_means > 1) = nan;
+            
+            paras = [repmat({'B_mean'},numel(B_means),1), mat2cell(B_means(:),ones(numel(B_means),1)),...                    
+                     repmat({'beta_mean'},numel(beta_means),1), mat2cell(beta_means(:),ones(numel(beta_means),1)),...
+                     ];
+                                  
+        elseif selectScan2D == 3   % 3. Baseline/A vs A
+            B_means = xx .* yy;
+            paras = [repmat({'B_mean'},numel(B_means),1), mat2cell(B_means(:),ones(numel(B_means),1)),...
+                     repmat(scan2D{selectScan2D}(2,1),numel(yy),1), mat2cell(yy(:),ones(numel(yy),1))];
+                 
+        elseif selectScan2D == 4     % 4. Baseline Drop/A vs A
+            beta_means = xx .* yy / B_mean_default;
             beta_means(beta_means > 1) = nan;
 
-            beta_stds = beta_means / beta_mean * beta_std; % Scaled std in respect to the original (0.7, 0.3)
-            
-            paras = [repmat(scan2D{selectScan2D}(1,1),numel(xx),1), mat2cell(xx(:),ones(numel(xx),1)),...
-                     repmat({'beta_mean'},numel(yy),1), mat2cell(yy(:),ones(numel(yy),1)),...
-                     repmat({'beta_std'}, numel(beta_stds),1), mat2cell(beta_stds(:),ones(numel(beta_stds),1)),...
-                     ];
-        else
+            paras = [repmat({'beta_mean'},numel(beta_means),1), mat2cell(beta_means(:),ones(numel(beta_means),1)),...
+                     repmat(scan2D{selectScan2D}(2,1),numel(yy),1), mat2cell(yy(:),ones(numel(yy),1))];
+                 
+        elseif selectScan2D == 7   % 7. Baseline/A^2 vs A
+            B_means = xx .* yy.^2;
+            paras = [repmat({'B_mean'},numel(B_means),1), mat2cell(B_means(:),ones(numel(B_means),1)),...
+                     repmat(scan2D{selectScan2D}(2,1),numel(yy),1), mat2cell(yy(:),ones(numel(yy),1))];
+
+        else  
             paras = [repmat(scan2D{selectScan2D}(1,1),numel(xx),1), mat2cell(xx(:),ones(numel(xx),1)),...
                      repmat(scan2D{selectScan2D}(2,1),numel(yy),1), mat2cell(yy(:),ones(numel(yy),1))];
         end
@@ -258,13 +321,16 @@ switch doScan
         parfor_progress(size(paras,1));  tic
         parfor pp = 1:size(paras,1)
             
-            result = InfoLossGroundTruth([paras(pp,:),'nu_neuron',1000]);
+            result = InfoLossGroundTruth([paras(pp,:),'nu_neuron',nu_neuron,'keepStdMeanRatio',keepStdMeanRatio,'ReLU',ReLU]);
             
             infos(pp,:) = cellfun(@(x)result.(x),{'I_0_optimal','I_0_ilPPC','I_epsi_optimal','I_epsi_ilPPC',...
                                                   'I_epsi_Saturation', 'psycho_Saturation', 'psycho_ilPPC'});
             parfor_progress();
         end
         parfor_progress(0);   toc
+        
+        % Plot example tuning using the "middle" condition
+        InfoLossGroundTruth([paras(fix(end/2),:),'nu_neuron',nu_neuron,'keepStdMeanRatio',keepStdMeanRatio,'ReLU',ReLU, 'plotTuning',1]);
         
         % --- Fetch data ---
         I_0_optimal = reshape(infos(:,1),size(xx,1),size(xx,2),nu_runs);
@@ -303,7 +369,7 @@ switch doScan
         
         
         if ION_cluster
-            saveas(13,'./4_Optimality_matrix_GroundTruth');
+            saveas(13,['./4_Optimality_matrix_GroundTruth_General2D_selectScan2D=' num2str(selectScan2D)]);
         end
 end
 
@@ -323,7 +389,7 @@ end
 
 %%
 % ========== Tuning properties =========
-InfoLossGroundTruth({'plotTuning',1});
+% InfoLossGroundTruth({'plotTuning',1});
 
 
 %{
