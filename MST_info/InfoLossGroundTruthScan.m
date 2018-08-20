@@ -19,17 +19,18 @@ end
 
 
 if ION_cluster
-    nu_runs = 5;
+    nu_runs = 7;
 else
-    nu_runs = 3;
+    nu_runs = 5;
 end
 
 nu_neuron = 1000;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % doScan = 'Scan Number of Neurons';
+ doScan = 'Scan Number of Neurons and epsilons or rho';
 % doScan = 'Scan epsis and baseline';
-doScan = 'Scan general linear 2-D';
+% doScan = 'Scan general linear 2-D';
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 switch doScan
@@ -112,6 +113,122 @@ switch doScan
         ylim([50 105]);
         xlabel('Number of neurons');
         ylabel('% of info recovery by ilPPC');
+        
+        fprintf('Saturated optimality = %g%%\n', mean(I_epsi_ilPPC(:,end)./I_epsi_optimal(:,end),1))
+        
+        if ION_cluster
+            file_name = sprintf('./1_Optimality 1D_GroundTruth');
+            saveas(gcf,[file_name '.fig'],'fig');
+        end
+        
+    case 'Scan Number of Neurons and epsilons or rho'
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%         epsis_or_rho = [0 0.2 0.4 0.6 0.8];
+%         epsis_or_rho_text = 'rho';
+%         epsis_or_rho = [0.1 0.5 1 2 4];
+%         epsis_or_rho_text = 'k';  fano
+        epsis_or_rho = [eps 0.01 0.1 0.5 1 2];
+        epsis_or_rho_text = 'fano'; 
+
+%         epsis_or_rho = [0 10.^(linspace(-4,-1,6))];
+%         epsis_or_rho_text = 'epsilon_0';
+        nu_neurons = round(10.^linspace(1,log10(10000),7)) + 1;
+        ReLU = 0;
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+              
+        % Linearize parameters
+        [xx, yy] = meshgrid(epsis_or_rho, nu_neurons);
+        paras = [repmat({epsis_or_rho_text},numel(xx),1), mat2cell(xx(:),ones(numel(xx),1)),...
+                 repmat({'nu_neuron'},numel(yy),1), mat2cell(yy(:),ones(numel(yy),1))];
+        paras = repmat(paras, nu_runs,1);
+
+        % Do Parallel
+        infos = nan(size(paras,1),7);
+        
+        parfor_progress(size(paras,1));  tic
+        for pp = 1:size(paras,1)
+            result = InfoLossGroundTruth([paras(pp,:), 'ReLU', ReLU]);
+            
+            infos(pp,:) = cellfun(@(x)result.(x),{'I_0_optimal','I_0_ilPPC','I_epsi_optimal','I_epsi_ilPPC',...
+                                                  'I_epsi_Saturation', 'psycho_Saturation', 'psycho_ilPPC'});
+            parfor_progress();
+        end
+        parfor_progress(0);   toc
+        
+        % Plot example tuning using the last condition
+        InfoLossGroundTruth([paras(end,:),'ReLU',ReLU, 'plotTuning',1]);
+
+        
+        I_0_optimal = reshape(infos(:,1),size(xx,1),size(xx,2),nu_runs);
+        I_0_ilPPC = reshape(infos(:,2),size(xx,1),size(xx,2),nu_runs);
+        I_epsi_optimal = reshape(infos(:,3),size(xx,1),size(xx,2),nu_runs);
+        I_epsi_ilPPC = reshape(infos(:,4),size(xx,1),size(xx,2),nu_runs);
+        I_epsi_optimal_inf = reshape(infos(:,5),size(xx,1),size(xx,2),nu_runs);
+        
+        %% =========== Plotting =============
+        % ====== Compare ilPPC with optimal =======
+        figure(11);  clf; hold on;
+        set(gca,'yscale','log','xscale','log')
+
+        % Optimal
+%         if epsis_or_rho_text == 'rho'
+            cols = jet;
+            cols = flipud(cols(round(linspace(1,size(cols,1),length(epsis_or_rho))),:));
+%         else
+%             cols = lines;
+%         end
+        
+        for ee = 1:length(epsis_or_rho)
+            errorbar(nu_neurons,mean(I_epsi_optimal(:,ee,:),3)', ...
+                                 std(I_epsi_optimal(:,ee,:),[],3)','o-','linew',3,'color',cols(ee,:));
+                             
+            I_inf_this = I_epsi_optimal_inf(1,ee,1);
+            if I_inf_this ~= inf
+                plot(xlim, ones(1,2) * I_inf_this, '--','color',cols(ee,:),'linew',2);
+                thres_discrim_epsi_inf = sqrt(2/I_inf_this)/pi*180;
+                set(text(nu_neurons(end), mean(I_epsi_optimal(end,ee,:)),...
+                    sprintf('%s = %.2e\n\\sigma = %.2g',epsis_or_rho_text,epsis_or_rho(ee),thres_discrim_epsi_inf)),'color',cols(ee,:));
+            end
+        end
+        
+        % ilPPC
+        % plot(nu_neurons, I_0_ilPPC,'ro--','linew',3,'markerfacecol','r');
+        % plot(nu_neurons, I_epsi_ilPPC,'bo--','linew',3,'markerfacecol','b');
+        
+%         thres_discrim_epsi = sqrt(2/mean(I_epsi_ilPPC(:,end),1))/pi*180;
+%         set(text(nu_neurons(end),I_epsi_ilPPC(end),sprintf('\\sigma = %g',thres_discrim_epsi)),'color','b');
+%         fprintf('Saturated sigma ~= %g\n',thres_discrim_epsi);
+        SetFigure(20);
+        xlabel('Number of neurons');
+        % plot(xlim,1/epsi*[1 1],'k','linew',2);
+        axis tight
+
+        if ION_cluster
+            file_name = sprintf('./0_Raw Info_GroundTruth');
+            % export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+            saveas(gcf,[file_name '.fig'],'fig');
+        end
+        
+        % ====== Optimality of ilPPC =========
+        figure(12);  clf;
+        hold on;
+        % Recovery of info
+        % plot(nu_neurons,I_0_ilPPC./I_0_optimal*100,'ro-','linew',3,'markerfacecol','r'); hold on
+        % plot(nu_neurons,I_epsi_ilPPC./I_epsi_optimal*100,'bo-','linew',3,'markerfacecol','b');
+        
+        % errorbar(nu_neurons,mean(I_0_ilPPC./I_0_optimal,1)*100, std(I_0_ilPPC./I_0_optimal,[],1)*100, 'ro-','linew',3,'markerfacecol','r'); hold on
+        for ee = 1:length(epsis_or_rho)
+            errorbar(nu_neurons,mean(I_epsi_ilPPC(:,ee,:)./I_epsi_optimal(:,ee,:),3)'*100, ...
+                                 std(I_epsi_ilPPC(:,ee,:)./I_epsi_optimal(:,ee,:),[],3)'*100,'o-','linew',3,'color',cols(ee,:));
+        end
+        
+        legend(num2str(epsis_or_rho'))
+        set(gca,'xscale','log')
+        axis tight; plot(xlim,[100 100],'k--','linew',2);
+        ylim([50 105]);
+        xlabel('Number of neurons');
+        ylabel('% of info recovery by ilPPC');
+        SetFigure(20);
         
         fprintf('Saturated optimality = %g%%\n', mean(I_epsi_ilPPC(:,end)./I_epsi_optimal(:,end),1))
         
@@ -386,7 +503,7 @@ end
 %     %}
 %     
 % end
-
+ 
 %%
 % ========== Tuning properties =========
 % InfoLossGroundTruth({'plotTuning',1});

@@ -9,19 +9,21 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%% Defult Parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 1. Tunings
-nu_neuron = 1000;
+nu_neuron = 8000;
 
 % mean_baselineDropRatioOfAi = 0.7;  % If not scan, this is real mean_beta. If scan, this will be the "baseline dropping ratio of Ai". 20180628
 
 ReLU = 0;  % Whether using ReLUs for each neuron to remove their minimal tuning curve. HH20180627
            % Add ReLU = 2: remove to B; ReLU = 1: remove to (1-beta)*B
-plotTuning = 0;
+plotTuning = 1;
 
 % Using gamma distribution to introduce heterogeneity
-A_mean = 47;   A_std = 30;
-k_mean = 1.7;  k_std = 0.9;
-beta_mean = 0.7;   beta_std = 0.3;
-B_mean = 20;    B_std = 20;
+coherence = 10; % Simulate coherence change by linearly scaling A and beta (manually!!!) HH20180811
+
+A_mean = 47 * coherence / 100;   A_std = 30 * coherence / 100;
+k_mean = 1.5;  k_std = 3; % 0.9
+beta_mean = 0.7 * coherence / 100;   beta_std = 0.3 * coherence / 100;
+B_mean = 20;    B_std = 20*1.5;
 
 % For keepStdMeanRatio
 A_mean_default = A_mean;   A_std_default = A_std;
@@ -31,7 +33,7 @@ B_mean_default = B_mean;    B_std_default = B_std;
 
 
 % 2. Correlations
-rho = 0.2;  k = 2;  fano = 1;  % Decay correlation
+rho = 0.1;  k = 2;  fano = 0.7;  % Decay correlation
 epsilon_0 = 0.00139; % f'f'T  Corresponds to threshold ~= 4 degree. Original 0.0027
 
 % 3. Miscs
@@ -43,7 +45,7 @@ keepStdMeanRatio = 0; % Automatically keep std/mean ratio the same as the defaul
 % --- Motion profile ---
 time_max = 2; % s
 % if ION_cluster
-dt = 50e-3; % s. This could be large because we're not simulating Poisson spikes.
+dt = 100e-3; % s. This could be large because we're not simulating Poisson spikes.
 % else
 %     dt = 100e-3;
 % end
@@ -105,6 +107,7 @@ gamma_B = (gamma_para(:,1))./gamma_A;    gamma_B(isnan(gamma_B)) = 0;
 % ---- Bias to +/- 90 degrees (Gu 2006) ---- [Little changing of % recovery]
 theta_pref = [randn(1,round(nu_neuron/2))*(1.2*pi/4)-(pi/2) randn(1,nu_neuron-round(nu_neuron/2))*(1.2*pi/4)+(pi/2)]';
 theta_pref = mod(theta_pref,2*pi)-pi;
+theta_pref = sort(theta_pref);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Do Simulation   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -122,7 +125,7 @@ betai = tuning_paras(:,3);
 Bi = tuning_paras(:,4);
 
 % Introduce correlation between Ai and Bi (stupid method)
-%{
+% %{
                     [~ ,sortAiId] = sort(Ai);
                     sortBi = sort(Bi);
                     newBi = sort(Bi);
@@ -145,9 +148,15 @@ Bi = tuning_paras(:,4);
 betai(betai > 1) = 1; % beta should be smaller than 1
 
 % To make sure the min peak is larger than (1 + min_signal_baseline_ratio)*Baseline
-%                     min_signal_baseline_ratio = 0.5;
-%                     to_trunc = find(Bi > Ai./(min_signal_baseline_ratio + betai));
-%                     Bi (to_trunc) = Ai(to_trunc)./(min_signal_baseline_ratio + betai(to_trunc));
+% min_signal_baseline_ratio = 0;
+% to_trunc = find(Bi > Ai./(min_signal_baseline_ratio + betai));
+% Bi (to_trunc) = Ai(to_trunc)./(min_signal_baseline_ratio + betai(to_trunc));
+
+% To make sure the min peak is larger than Baseline + min_signal_baseline_ratio * Amp. HH20180811
+min_signal_baseline_ratio = 0.1;
+to_trunc = find(Bi > (1 - min_signal_baseline_ratio) * Ai./ betai);
+Bi (to_trunc) = (1 - min_signal_baseline_ratio) * Ai(to_trunc)./ betai(to_trunc);
+
 
 % ========= Spatial-temporal tunings =======
 % [f]: Population activity as a function of stimulus theta. Baseline term accounts for what we found in Gu MST data
@@ -183,7 +192,7 @@ resp_der = tuning_theta_der(theta_stim);
 
 C = (1-rho)*eye(nu_neuron) + rho*exp(k*(cos(theta_pref * ones(1,nu_neuron) - ones(nu_neuron,1) * theta_pref')-1)); % Correlation coefficient (Moreno 2014 NN)
 
-SIGMA_0_ilPPC = zeros(nu_neuron,nu_neuron);
+% SIGMA_0_ilPPC = zeros(nu_neuron,nu_neuron);
 SIGMA_epsi_ilPPC = zeros(nu_neuron,nu_neuron);
 
 I_0_ts = nan(1,length(time));
@@ -215,12 +224,13 @@ for tt = 1:length(time)    % Across all trial
     end
     
     % ====== Adding momentary covariance matrix for ilPPC (assuming independent noise over time)
-    SIGMA_0_ilPPC = SIGMA_0_ilPPC + SIGMA_0_ts;
+    % SIGMA_0_ilPPC = SIGMA_0_ilPPC + SIGMA_0_ts;
     SIGMA_epsi_ilPPC = SIGMA_epsi_ilPPC + SIGMA_epsi_ts;
 end
 
 % ======= 1. Sum of all momentary info (standard of optimality) ========
-result.I_0_optimal = sum(I_0_ts) * dt;  % Area under momentary info (so that total info does not dependent on dt)
+% result.I_0_optimal = sum(I_0_ts) * dt;  % Area under momentary info (so that total info does not dependent on dt)
+result.I_0_optimal = nan;
 result.I_epsi_optimal = sum(I_epsi_ts) * dt;
 
 %     % For checking momentary info temporally
@@ -230,8 +240,10 @@ result.I_epsi_optimal = sum(I_epsi_ts) * dt;
 % ======= 2. Info of straight sum of spikes (ilPPC) ========
 f_der_ilPPC = sum(resp_der,2);
 
-result.I_0_ilPPC = f_der_ilPPC' * (SIGMA_0_ilPPC \ f_der_ilPPC) * dt;
+% result.I_0_ilPPC = f_der_ilPPC' * (SIGMA_0_ilPPC \ f_der_ilPPC) * dt;
+result.I_0_ilPPC = nan;
 result.I_epsi_ilPPC = f_der_ilPPC' * (SIGMA_epsi_ilPPC \ f_der_ilPPC) * dt;
+result.epsi_optimality = result.I_epsi_ilPPC / result.I_epsi_optimal;
 
 % Threshold
 % ========= Prediction of psychothreshold ========
@@ -340,13 +352,13 @@ set(findall(gcf,'type','axes'),'Ylim',[0 ylnew]);
     set(gca,'xtick',-180:90:180); ylim([0 60])
     title(['n=' num2str(length(average_neuron))]);
     set(gca,'color',[0.8 0.8 0.8])
-    
+     
     subplot(2,4,3);
     hist(Ai,30); title('Amp');
     
     subplot(2,4,4);
     half_widths = acos(1+log(0.5)./ki)*180/pi;
-    half_widths(imag(half_widths)~=0) = 180;
+    half_widths(imag(half_widths)~=0) = 360;
     hist(half_widths, 30); title('Tuning half width');
     
     subplot(2,4,7);
