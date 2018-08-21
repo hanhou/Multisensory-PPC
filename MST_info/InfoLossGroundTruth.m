@@ -21,19 +21,21 @@ plotTuning = 1;
 coherence = 10; % Simulate coherence change by linearly scaling A and beta (manually!!!) HH20180811
 
 A_mean = 47 * coherence / 100;   A_std = 30 * coherence / 100;
-k_mean = 1.5;  k_std = 3; % 0.9
+halfwidth_mean = 110;  halfwidth_std = 40;
 beta_mean = 0.7 * coherence / 100;   beta_std = 0.3 * coherence / 100;
-B_mean = 20;    B_std = 20*1.5;
+B_mean = 20;    B_std = 20;
+
+localSharpen = 2; % According to Gu 2010 Supplementary Fig. 3
 
 % For keepStdMeanRatio
 A_mean_default = A_mean;   A_std_default = A_std;
-k_mean_default = k_mean;  k_std_default = k_std;
+halfwidth_mean_default = halfwidth_mean;  halfwidth_std_default = halfwidth_std;
 beta_mean_default = beta_mean;   beta_std_default = beta_std;
 B_mean_default = B_mean;    B_std_default = B_std;
 
 
 % 2. Correlations
-rho = 0.1;  k = 2;  fano = 0.7;  % Decay correlation
+rho = 0.1;  k = 2;  fano = 0.8;  % Decay correlation
 epsilon_0 = 0.00139; % f'f'T  Corresponds to threshold ~= 4 degree. Original 0.0027
 
 % 3. Miscs
@@ -85,7 +87,7 @@ end
 
 if keepStdMeanRatio
     A_std = A_std_default * A_mean / A_mean_default;
-    k_std = k_std_default * k_mean / k_mean_default;
+    halfwidth_std = halfwidth_std_default * halfwidth_mean / halfwidth_mean_default;
     beta_std = beta_std_default * beta_mean / beta_mean_default;
     B_std = B_std_default * beta_mean / B_mean_default;
 end
@@ -93,7 +95,7 @@ end
 % Finalize tuning parameters
 gamma_para = [ % Mean   Std  (Desired)
     A_mean,  A_std;  % amp
-    k_mean,   k_std;  % Controls sigma of spatial tuning: k = log(0.5)/(cos(degtorad(desired_half_width))-1)
+    halfwidth_mean,   halfwidth_std;  % Controls sigma of spatial tuning: k = log(0.5)/(cos(degtorad(desired_half_width))-1)
     beta_mean,   beta_std; % beta
     B_mean,   B_std;  % original 20, 5
     ];
@@ -120,12 +122,12 @@ for pp = 1:size(gamma_para,1)
 end
 
 Ai = tuning_paras(:,1);
-ki = tuning_paras(:,2);
+ki = log(0.5)./(cos(deg2rad(tuning_paras(:,2))/2)-1);
 betai = tuning_paras(:,3);
 Bi = tuning_paras(:,4);
 
 % Introduce correlation between Ai and Bi (stupid method)
-% %{
+%{
                     [~ ,sortAiId] = sort(Ai);
                     sortBi = sort(Bi);
                     newBi = sort(Bi);
@@ -180,7 +182,7 @@ end
 %}
 
 % [f']: Derivative of tuning (independent of ReLU)
-tuning_theta_der = @(theta) Ai.* exp(ki.*(cos(theta_pref - theta)-1)).* ...
+tuning_theta_der = @(theta) localSharpen * Ai.* exp(ki.*(cos(theta_pref - theta)-1)).* ...
     (ki .* sin(theta_pref - theta)) * speed_t;
 % -- Plot f'--
 % fp = tuning_theta_prime(0);
@@ -357,8 +359,7 @@ set(findall(gcf,'type','axes'),'Ylim',[0 ylnew]);
     hist(Ai,30); title('Amp');
     
     subplot(2,4,4);
-    half_widths = acos(1+log(0.5)./ki)*180/pi;
-    half_widths(imag(half_widths)~=0) = 360;
+    half_widths = acos(1+log(0.5)./ki)*180/pi*2;
     hist(half_widths, 30); title('Tuning half width');
     
     subplot(2,4,7);
@@ -367,6 +368,12 @@ set(findall(gcf,'type','axes'),'Ylim',[0 ylnew]);
     subplot(2,4,8);
     hist(betai,30); title('beta');
     xlim([0 1])
+    
+    figure(2045); clf
+    plot(theta_pref(round(linspace(1,end,1000)))/pi*180,half_widths(round(linspace(1,end,1000))),'ok')
+    set(gca,'xtick',-180:90:180,'ytick',45:45:270)
+    ylim([45 280])
+
     
     if ION_cluster
         file_name = sprintf('./3_average tuning');
