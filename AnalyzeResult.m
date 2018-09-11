@@ -1,7 +1,7 @@
 %% Analysis switch
 if ION_cluster
-analysis_switch = [1;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation
-                   0;  % 0p5 Decoding method 
+analysis_switch = [0;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation 
+                   1;  % 0p5 Decoding method 
                        % 1 Overview (mandatary)
                    1;  % 1p5 Overview (normalized)
                    1;  % 2 Example
@@ -12,16 +12,16 @@ analysis_switch = [1;  % 0p1 Fig2a of Beck 2008 and noise correlation calculatio
                    1;  % 6 Information in sensory areas
                    ];
 else
-analysis_switch = [1;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation 
-                   1;  % 0p5 Decoding method 
+analysis_switch = [0;%1;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation
+                   0;  % 0p5 Decoding method 
                        % 1 Overview (mandatary)
                    1;  % 1p5 Overview (normalized)
                    1;  % 2 Example
-                   1;  % 3 Cells deltaPSTH
-                   1;  % 3p5 Cells rawPSTH
-                   1;  % 4 Heterogeneity
-                   1;  % 5 Linear regression (Gu 2008)
-                   1;  % 6 Information in sensory areas
+                   1;%1;  % 3 Cells deltaPSTH
+                   0;% 1;  % 3p5 Cells rawPSTH
+                   0;%1;  % 4 Heterogeneity
+                   0;%1;  % 5 Linear regression (Gu 2008)
+                   0;%1;  % 6 Information in sensory areas
                    ];
 end
 
@@ -94,7 +94,7 @@ rate_int_Ann = rate_lip_Ann;
 
 % -- Sliding window --
 for tt = 1:length(ts_Ann)
-    fprintf('%.2g%%\n',tt/length(ts_Ann)*100);
+    % fprintf('%.2g%%\n',tt/length(ts_Ann)*100);
     this_range = ts_Ann(tt)-win_wid/2 <= ts & ts <= ts_Ann(tt)+win_wid/2;
     rate_lip_Ann(:,tt,:,:,:) = sum(spikes_lip(:,this_range,:,:,:),2)/win_wid;
     rate_int_Ann(:,tt,:,:,:) = sum(spikes_int(:,this_range,:,:,:),2)/win_wid;
@@ -117,20 +117,29 @@ fprintf(' Done!\n');
 if if_debug
     
     figure(1041); clf
-    plot(ts_Ann,mean(rate_lip_Ann(left_targ_ind,:,:,1,2),3),'b--'); hold on;
-    plot(ts_Ann,mean(rate_lip_Ann(right_targ_ind,:,:,1,2),3),'b')
+    plot(ts_Ann,mean(rate_lip_Ann(left_targ_ind,:,:,1,2),3),'b'); hold on;
+    plot(ts_Ann,mean(rate_lip_Ann(right_targ_ind,:,:,1,2),3),'b--')
 
-%     plot(ts_Ann,mean(rate_lip_Ann_smooth(left_targ_ind,:,:,1,2),3),'k--');
-%     plot(ts_Ann,mean(rate_lip_Ann_smooth(right_targ_ind,:,:,1,2),3),'k')
+    plot(ts_Ann,mean(rate_lip_Ann_smooth(left_targ_ind,:,:,1,2),3),'k');
+    plot(ts_Ann,mean(rate_lip_Ann_smooth(right_targ_ind,:,:,1,2),3),'k--')
 
     % plot(ts,mean(rectified_rate_lip(left_targ_ind,:,:,end,1),3),'r--');
     % plot(ts,mean(rectified_rate_lip(right_targ_ind,:,:,end,1),3),'r');
-    plot(ts,mean(rate_lip(left_targ_ind,:,:,1,2),3),'g--');
-    plot(ts,mean(rate_lip(right_targ_ind,:,:,1,2),3),'g');
+    plot(ts,mean(rate_lip(left_targ_ind,:,:,1,2),3),'g');
+    plot(ts,mean(rate_lip(right_targ_ind,:,:,1,2),3),'g--');
     % export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/test.png'));
     
+    
+    plot(ts_Ann,mean(rate_int_Ann(left_targ_ind,:,:,1,2),3),'b'); hold on;
+    plot(ts_Ann,mean(rate_int_Ann(right_targ_ind,:,:,1,2),3),'b--')
+
+    plot(ts,mean(rate_int(left_targ_ind,:,:,1,2),3),'k');
+    plot(ts,mean(rate_int(right_targ_ind,:,:,1,2),3),'k--')
+
+
+    
     %% Example snapshot of population activity (for demo)
-    spkCntCent = [1.4];
+    spkCntCent = [0.8];
     spkCntWin = 0.2; % 200 ms
     areas = {'lip','int','target','vest','vis'};
     cols = {'g','k','k','b','r'};
@@ -1512,8 +1521,8 @@ end
 %% Information of sensory areas
 if analysis_switch(9)
     
-    % --------------- Get spike counts (in Hz) -----------------
-    info_win_wid = 250e-3; % 100e-3; % in s
+    %% --------------- Get spike counts (in Hz) -----------------
+    info_win_wid = 200e-3; % 100e-3; % in s
     info_win_step = 20e-3; % 100e-3; 
     n_info_win = round((trial_dur_total-info_win_wid)/info_win_step)+1;
     
@@ -1545,37 +1554,48 @@ if analysis_switch(9)
     train_ratio = 0.5;
     
     infos_dt_lip = zeros(n_info_win,3);
-    infos_dt_lip_simpleGu = zeros(n_info_win,3); infos_dt_lip_simpleGu_SE = infos_dt_lip_simpleGu;
     infos_t_vest = zeros(n_info_win,3);
     infos_t_vis = zeros(n_info_win,3);
+    infos_dt_lip_simpleGu = zeros(n_info_win,3); infos_dt_lip_simpleGu_SE = infos_dt_lip_simpleGu;
+    infos_dt_lip_partialSensoryFI = zeros(n_info_win,3);   infos_dt_lip_partialSensoryFI_SE = zeros(n_info_win,3);   
+    infos_dt_lip_partialChoiceFI = zeros(n_info_win,3);   infos_dt_lip_partialChoiceFI_SE = zeros(n_info_win,3);   
     
     disp('Calculate information...')
     headings = reshape(repmat(unique_heading,N_rep,1),[],1);
 
     % ------------ Train the decoder once using the most informative (the last one) spike counts -----------------
-    [~,svm_model_lip_count] = fisher_HH(reshape(spikecount_dt_lip(:,end,:,:,3),N_lip,[])',headings,train_ratio);
-    [~,svm_model_vest_count] = fisher_HH(reshape(spikecount_t_vest(:,end,:,:,3),N_vest,[])',headings,train_ratio);
-    [~,svm_model_vis_count] = fisher_HH(reshape(spikecount_t_vis(:,end,:,:,3),N_vis,[])',headings,train_ratio);
+%     [~,svm_model_lip_count] = fisher_HH(reshape(spikecount_dt_lip(:,end,:,:,3),N_lip,[])',headings,train_ratio);
+%     [~,svm_model_vest_count] = fisher_HH(reshape(spikecount_t_vest(:,end,:,:,3),N_vest,[])',headings,train_ratio);
+%     [~,svm_model_vis_count] = fisher_HH(reshape(spikecount_t_vis(:,end,:,:,3),N_vis,[])',headings,train_ratio);
     
-    % ------------ Info in each small window --------------
-    parfor tt = 1:n_info_win
+    %% ------------ Info in each small window --------------
+    for tt = 1:n_info_win
         for kk = 1:3
             
             activities = reshape(spikecount_dt_lip(:,tt,:,:,kk),N_lip,[])';
-            infos_dt_lip(tt,kk) = fisher_HH(activities,headings,train_ratio,svm_model_lip_count);
+%             infos_dt_lip(tt,kk) = fisher_HH(activities,headings,train_ratio,svm_model_lip_count);
             
-            % Add FisherSimpleGu as in the experiment data. HH20180622 03:18 Argentina 0:3 Croatia...
+            % ---- Add FisherSimpleGu as in the experiment data. HH20180622 03:18 Argentina 0:3 Croatia... ----
             [infos_dt_lip_simpleGu(tt,kk), infos_dt_lip_simpleGu_SE(tt,kk)] = ...
                         fisher_HH_simpleGu(activities(:,to_calculate_PSTH_cells_ind),headings);
+                    
+            % ---- Add Partial FisherInfo. HH20180824
+            result = fisher_HH_partialFI(activities(:,to_calculate_PSTH_cells_ind),headings,reshape(choices(:,:,kk),[],1));
+            
+            infos_dt_lip_partialSensoryFI(tt,kk) = result.infoPartialSensory;
+            infos_dt_lip_partialSensoryFI_SE(tt,kk) = result.bootSESensory;
+            infos_dt_lip_partialChoiceFI(tt,kk) = result.infoPartialChoice;
+            infos_dt_lip_partialChoiceFI_SE(tt,kk) = result.bootSEChoice;
+                        
             
             if kk ~= 2
                 activities = reshape(spikecount_t_vest(:,tt,:,:,kk),N_vest,[])';
-                infos_t_vest(tt,kk) = fisher_HH(activities,headings,train_ratio,svm_model_vest_count);
+%                 infos_t_vest(tt,kk) = fisher_HH(activities,headings,train_ratio,svm_model_vest_count);
             end
             
             if kk ~= 1
                 activities = reshape(spikecount_t_vis(:,tt,:,:,kk),N_vis,[])';
-                infos_t_vis(tt,kk) = fisher_HH(activities,headings,train_ratio,svm_model_vis_count);
+%                 infos_t_vis(tt,kk) = fisher_HH(activities,headings,train_ratio,svm_model_vis_count);
             end
         end
     end
@@ -1583,14 +1603,15 @@ if analysis_switch(9)
     disp('Calculate information... Done')
     
     figure(1446);   clf;
-    set(gcf,'uni','norm','pos',[0.036       0.123       0.549       0.691]);    
-    subplot(2,2,1);
+    set(gcf,'uni','norm','pos',[0.013       0.079       0.875       0.733]);    
+    
+    subplot(2,3,1);
     plot(info_ts,infos_dt_lip(:,1),'bo-', info_ts, infos_t_vest(:,1),'b--'); hold on; title('vest');
     
-    subplot(2,2,2); 
+    subplot(2,3,2); 
     plot(info_ts,infos_dt_lip(:,2),'ro-', info_ts, infos_t_vis(:,2),'r--'); hold on; title('vis');
 
-    h_3 = subplot(2,2,3);
+    h_3 = subplot(2,3,3);
     plot(info_ts,infos_dt_lip(:,3),'go-', info_ts, infos_t_vest(:,3),'b--', ...
             info_ts, infos_t_vis(:,3),'r--', ...
             info_ts, infos_t_vis(:,3) + infos_t_vest(:,3),'k--',...
@@ -1598,10 +1619,24 @@ if analysis_switch(9)
    
     linkaxes(findobj(gcf,'type','axes'),'xy');
     
-    h_4 = subplot(2,2,4);
+    h_4 = subplot(2,3,4);
     SeriesComparison(shiftdim(infos_dt_lip_simpleGu,-1),info_ts,'OverrideError',infos_dt_lip_simpleGu_SE,'axes',h_4);
     hold on; plot(info_ts,sum(infos_dt_lip_simpleGu(:,1:2),2),'m','linew',2);
-    xlim([0 1.5]); legend off; title('FI simple (Gu)')
+    xlim([0 1.5]); legend off; title('Standard FI (Gu 2010)')
+    
+    h_5 = subplot(2,3,5);
+    SeriesComparison(shiftdim(infos_dt_lip_partialSensoryFI,-1),info_ts,'OverrideError',infos_dt_lip_partialSensoryFI_SE,'axes',h_5);
+    hold on; plot(info_ts,sum(infos_dt_lip_partialSensoryFI(:,1:2),2),'m','linew',2);
+    xlim([0 1.5]); legend off; title('Partial Sensory FI (Gu)')
+    
+    linkaxes([h_4 h_5],'xy')
+    
+    h_6 = subplot(2,3,6);
+    SeriesComparison(shiftdim(infos_dt_lip_partialChoiceFI,-1),info_ts,'OverrideError',infos_dt_lip_partialChoiceFI_SE,'axes',h_6);
+    hold on; plot(info_ts,sum(infos_dt_lip_partialChoiceFI(:,1:2),2),'m','linew',2);
+    xlim([0 1.5]); legend off; title('Partial Choice FI (Gu)')
+    
+    SetFigure(20)    
     
     if ION_cluster
         file_name = sprintf('./result/%s6_Info%s',save_folder,para_override_txt);

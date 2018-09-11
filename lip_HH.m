@@ -15,7 +15,8 @@ if(~isdeployed)
 end
 addpath(genpath(pwd));
 
-rand('state',sum(100*clock));
+% rand('state',sum(100*clock));
+rng('shuffle')
 
 hostname = char( getHostName( java.net.InetAddress.getLocalHost)); % Get host name
 
@@ -78,7 +79,7 @@ else
     
     N_int = 100;
     N_lip = 100;  % Output layers (Real LIP layer)
-    dt = 5e-3;
+    dt = 2e-3;
 end
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
@@ -115,6 +116,7 @@ if ION_cluster
     N_rep = 100; % For each condition
 else
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
+%     unique_heading = [-8 0 8];
     conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
     N_rep = 20;
@@ -265,8 +267,8 @@ if nargin >= 1
     end
 end
 
-[~,gitlog] = system('git describe --always');
-gitlog = sprintf('%s',gitlog(1:7));
+% [~,gitlog] = system('git describe --always');
+% gitlog = sprintf('%s',gitlog(1:7));
 cc = clock;
 cc = sprintf('%g%02g%02g%g%g',cc(1:5));
 % save_folder = [save_folder cc '_' gitlog '_'];
@@ -796,7 +798,7 @@ parfor tt = 1:n_parfor_loops % For each trial
     % I realize that I should set random seed for each parallel workers! (set at the beginning of the file does not count)
     % Otherwise, the workers are using actually the same series of random numbers across trials, which will lead to "bumps" in PSTH
     % HH20180622
-    rand('state',sum(100*clock));
+    % rand('state',sum(100*clock));
     
     % -- Get data from cheat sheet --
     cond_this = ss_hh_cheatsheet(tt,:);

@@ -14,6 +14,8 @@ for hh = 1:length(unique_heading)
 end
 
 % Fit cell by cell
+infoEachCell = nan(size(activities,2),1);
+
 for cc = 1:size(activities,2)
     linearFit = polyfit(unique_heading,tuningMean(:,cc),1);
     slopeInRad = linearFit(1)*(180/pi);
