@@ -54,7 +54,7 @@ event_in_bin = squeeze(data.event_data(:,:,select_trials))';  % TrialNum * 5000
 % Get Coherence   20180603
 coherence = mean(data.moog_params(COHERENCE,:,1));
 
-%% ========== Calculate time-sliding tuning curves ===========
+%% ========== 1. Calculate time-sliding tuning curves ===========
 
 % ------- Time-related -------
 trial_begin = mode(mod(find(event_in_bin'==4),5000));
@@ -112,6 +112,7 @@ for k = 1:length(unique_stim_type)
     % P value
     p_value(k) = anova1(raw_firing_for_p_value(:,:,k)','','off');
     
+    
     % Wrap tuning curve so that pref is at the center
     % The caveats is that the sampling should be uniform here!! (or using curve fitting first which I'm not willing to do so)
     pref_this_k = pref_az(k,end);
@@ -120,25 +121,139 @@ for k = 1:length(unique_stim_type)
     uniform_mean_firing_matrix = mean_firing_matrix(down_sampled_azimuth,:,k);
     uniform_se_firing_matrix = se_firing_matrix(down_sampled_azimuth,:,k);
         
-    [~,ind] = min(abs(pref_this_k - uniform_unique_azimuth));
-    mean_firing_matrix_wrap(:,:,k) = circshift(uniform_mean_firing_matrix, length(uniform_unique_azimuth)/2+1-ind);
-    se_firing_matrix_wrap(:,:,k) = circshift(uniform_se_firing_matrix, length(uniform_unique_azimuth)/2+1-ind);
+    [~,ind(k)] = min(abs(pref_this_k - uniform_unique_azimuth));
+    mean_firing_matrix_wrap(:,:,k) = circshift(uniform_mean_firing_matrix, length(uniform_unique_azimuth)/2+1-ind(k));
+    se_firing_matrix_wrap(:,:,k) = circshift(uniform_se_firing_matrix, length(uniform_unique_azimuth)/2+1-ind(k));
 end
 
 mean_firing_matrix_wrap(end+1,:,:) = mean_firing_matrix_wrap(1,:,:);
 se_firing_matrix_wrap(end+1,:,:) = se_firing_matrix_wrap (1,:,:);
 
-figure(223); clf;      set(gcf,'uni','norm','pos',[0.023        0.34       0.855       0.365]);
+% Congruency index
+r = corrcoef(mean_firing_matrix(:,end,1),mean_firing_matrix(:,end,2));
+CI.all = r(2); % Simple one
+
+r = corrcoef(sum(mean_firing_matrix(:,3:7,1),2), sum(mean_firing_matrix(:,3:7,2),2));
+CI.first_half = r(2);
+
+r = corrcoef(sum(mean_firing_matrix(:,8:12,1),2), sum(mean_firing_matrix(:,8:12,2),2));
+CI.second_half = r(2);
+
+
+color_order = colormap(jet);
+color_order = color_order(round(linspace(1,size(color_order,1),length(ROI))),:);
+
+set(0,'defaultaxescolororder',color_order);
+
+figure(223); clf;      set(gcf,'uni','norm','pos',[0.023       0.079       0.776       0.763]);
 for k = 1:length(unique_stim_type)
-    subplot(1,3,k);
+    subplot(2,3,k);
     errorbar(mean_firing_matrix_wrap(:,:,k),se_firing_matrix_wrap(:,:,k));
     hold on; 
     plot(mean_firing_matrix_wrap(:,end,k),'k','linew',2);
     title(sprintf('stim type = %g, p=%g', unique_stim_type(k), p_value(k)));
+    
+    % Plot "90 heading"
+    pos_90 = 3 + (length(uniform_unique_azimuth)/2+1-ind(k));
+    plot([pos_90 pos_90], ylim, 'k--', 'linew',2)
+    
     if unique_stim_type(k)==2,  ylabel(sprintf('Coherence = %g',coherence)), end
    
 end
 set(gcf,'name',FILE);
+
+%% ========== 2. 10-ms window PSTH of Pref-Null to fitting Model M1 (20180916) ===========
+% Since only temporal dynamics matters in fitting the traces, I only care about the relative responses.
+% Given that, I 
+%   1) Find out the pref direction (using Gu's center 1.5 s window)
+%   2) Output the PSTH along this direction (PREF) as well as the deltaPSTH between pref and null (PREF-NULL) as a function of time.
+
+% Same as for LIP data
+binSize_rate = 10;  % in ms
+stepSize_rate = 10; % in ms
+smoothFactor = 50; % in ms !!
+
+PSTH_ts = -150 : stepSize_rate : 2150; % Only 0~2000 ms
+PSTH_pref = nan(length(PSTH_ts),length(unique_stim_type));
+PSTH_null = nan(length(PSTH_ts),length(unique_stim_type));
+
+for k = 1:length(unique_stim_type)
+    % 1) Pref direction (simply using max instead of vector sum)
+    [~,pref_this] = max(mean_firing_matrix(:,end,k)); % "End" means center 1.5s window
+    null_this = unique_azimuth == mod(unique_azimuth(pref_this) + 180, 360);
+    
+    % 2) Get PSTH from raw spike train
+    select_pref_trials = (stim_type_per_trial == unique_stim_type(k)) & ...
+        (azimuth_per_trial == unique_azimuth(pref_this)) & ...
+        any(elevation_per_trial == elevation_included,2);
+    select_null_trials = (stim_type_per_trial == unique_stim_type(k)) & ...
+        (azimuth_per_trial == unique_azimuth(null_this)) & ...
+        any(elevation_per_trial == elevation_included,2);
+    
+    % --- Calculate PSTH --  HH20180916
+    for tt = 1:length(PSTH_ts)
+        this_t = trial_begin + (PSTH_ts(tt) - binSize_rate/2)/spike_timeWin + 1 : trial_begin + (PSTH_ts(tt) + binSize_rate/2)/spike_timeWin;
+        PSTH_pref(tt,k) = mean(sum(spike_in_bin(select_pref_trials,this_t),2),1)/(binSize_rate/1000);
+        PSTH_null(tt,k) = mean(sum(spike_in_bin(select_null_trials,this_t),2),1)/(binSize_rate/1000);
+    end
+    
+    PSTH_pref_smoothed(:,k) =  GaussSmooth(PSTH_ts,PSTH_pref(:,k),smoothFactor);
+    PSTH_null_smoothed(:,k) =  GaussSmooth(PSTH_ts,PSTH_null(:,k),smoothFactor);
+    
+    % --- Calculate FI --- (simple Gu) HH20180917
+    
+end
+
+set(0,'defaultAxesColorOrder',[41 89 204; 248 28 83; 14 153 46]/255);
+figure(223); subplot(2,3,4)
+plot(PSTH_ts,PSTH_pref_smoothed - PSTH_null_smoothed)
+
+%% ===== 3. Fisher info (20180917) ======
+
+binSize_FI = 250;  % in ms  % According to Shadlen 2001
+stepSize_FI = 50; % in ms  % Match PSTH, CD, and others
+
+FI_ts = -150 : stepSize_FI : 2150; 
+FI = nan(length(FI_ts),length(unique_stim_type));
+
+mean_firing_matrix_for_FI = nan(length(unique_azimuth), length(FI_ts), length(unique_stim_type));
+se_firing_matrix_for_FI = nan(length(unique_azimuth), length(FI_ts), length(unique_stim_type));
+
+xx = 0:0.1:360; % Gu 2010
+xx_left = find(xx<90,1,'last');
+xx_right = find(xx>90,1);
+
+for k = 1:length(unique_stim_type)
+    
+    % --- Calculate PSTH --  HH20180917
+    for tt = 1:length(FI_ts)
+        this_t = trial_begin + (FI_ts(tt) - binSize_FI/2)/spike_timeWin + 1 : trial_begin + (FI_ts(tt) + binSize_FI/2)/spike_timeWin;
+        
+        % -- Get spatial tuning --
+        for aa = 1:length(unique_azimuth)
+            select_trials = (stim_type_per_trial == unique_stim_type(k)) & ...
+                (azimuth_per_trial == unique_azimuth(aa)) & ...
+                any(elevation_per_trial == elevation_included,2);
+            
+            mean_firing_matrix_for_FI(aa,tt,k) = mean(sum(spike_in_bin(select_trials,this_t),2),1)/(binSize_FI/1000);
+            se_firing_matrix_for_FI(aa,tt,k) = std(sum(spike_in_bin(select_trials,this_t),2),1)/(binSize_FI/1000)/sqrt(sum(select_trials));
+        end
+        
+        % -- Calculate FI --
+        spline_this = spline(unique_azimuth, mean_firing_matrix_for_FI(:,tt,k), xx); % Spline fit
+        slope_at_90 = (spline_this(xx_left)-spline_this(xx_right))/(xx(xx_left)-xx(xx_right)); % Local slope
+        variance_at_90 = max(spline_this((xx_left+xx_right)/2), 0.5); % Poisson assumption with 0.5 Hz minimal variance, Gu 2010
+        
+        % --- Save data ---
+        FI(tt,k) = slope_at_90^2/variance_at_90;
+        
+    end
+        
+end
+
+figure(223); subplot(2,3,5)
+plot(FI_ts, FI)
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Data Saving
@@ -158,7 +273,9 @@ result = PackResult(FILE, PATH, SpikeChan, unique_stim_type, Protocol, ... % Obl
     unique_azimuth, unique_elevation,...
     mean_firing_matrix_wrap, se_firing_matrix_wrap, ...
     mean_firing_matrix, se_firing_matrix, ...
-    pref_az, ROI, p_value, coherence ...
+    pref_az, ROI, p_value, coherence, ...
+    PSTH_pref_smoothed, PSTH_null_smoothed, PSTH_ts, ...
+    FI_ts, FI, CI ...
     ); % model info
 
 config.suffix = 'ilPPC';

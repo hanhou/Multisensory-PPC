@@ -13,7 +13,7 @@ function userResult = lip_HH(para_override,output_result)
 if(~isdeployed)
     cd(fileparts(which(mfilename)));
 end
-addpath(genpath(pwd));
+%addpath(genpath(pwd));
 
 % rand('state',sum(100*clock));
 rng('shuffle')
@@ -26,6 +26,8 @@ if ~isempty(strfind(hostname,'node')) || ~isempty(strfind(hostname,'clc')) % con
         parpool('local',20);
     end
     ION_cluster = 1;
+    addpath(genpath(pwd));
+
 else % My own computer
     if strcmp(version('-release'),'2013a')
         if matlabpool('size') == 0
@@ -157,13 +159,13 @@ var_vis = A_eta; % Although the Methods of Beck 2008 did not mention the "sqrtm"
 max_rate_target = 30; %% in Hz
 b_target = 0;
 K_target = 4;
-slope_norm_target=0.5;
+slope_norm_target=0.5;c
 dc_norm_target = 0.5;
 
 % Gains
 % Maybe should be set such that gain_vis:gain_vest = (integral of abs(a))/(integral of v)
-gain_vel_vis = 7; % (m/s)^-1
-gain_acc_vest = 2.6; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
+gain_vel_vis = 7; %   Corresponding to max vel of 0.93 * 7 = 2.45
+gain_acc_vest = 2.6; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1  % Corresponding to max acc of 2.42
 
 % =================== Network configuration ===================
 % -- Time constant for integration
