@@ -13,16 +13,19 @@ function result = lip_HH_test(para_override,output_result)
 if(~isdeployed)
     cd(fileparts(which(mfilename)));
 end
-addpath(genpath(pwd));
 
-rand('state',sum(100*clock));
+rng('shuffle')
 
-if strcmp(version('-release'),'2014b')    % ION cluster;
-    hostname = char( getHostName( java.net.InetAddress.getLocalHost)); % Get host name
+hostname = char( getHostName( java.net.InetAddress.getLocalHost)); % Get host name
+
+if ~isempty(strfind(hostname,'node')) || ~isempty(strfind(hostname,'clc')) % contains(hostname,{'node','clc'})  % ION cluster;
     if isempty(gcp('nocreate'))
-        parpool(hostname(1:strfind(hostname,'.')-1),20);
+        % parpool(hostname(1:strfind(hostname,'.')-1),20);
+        parpool('local',20);
     end
     ION_cluster = 1;
+    addpath(genpath(pwd));
+
 else % My own computer
     if strcmp(version('-release'),'2013a')
         if matlabpool('size') == 0
@@ -51,18 +54,19 @@ h_grouped = [];
 % ============ Sizes ============
 % Input layers
 N_targets = 2; % Target input
-N_vis = 200; % Visual motion signal
-N_vest = 200; % Vestibular motion signal
+N_vis = 100; % Visual motion signal
+N_vest = 100; % Vestibular motion signal
 
 % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
 % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
 % which has a short time constant, keeps receiving target input but does not integrate it.
 % For most part of the code, I just rename the old "_lip" stuff to "_int"
-N_int = 300;
-N_lip = 300;  % Output layers (Real LIP layer)
+N_int = 200;
+N_lip = 200;  % Output layers (Real LIP layer)
 
 % ============ Times ============
 if ION_cluster
+    % dt = 1e-3; % Size of time bin in seconds
     dt = 5e-3; % Size of time bin in seconds
 else
     dt = 5e-3;
@@ -75,7 +79,9 @@ delay_for_all = 0.15; % in s
 delay_another_for_visual = 0.1; % in s
 
 % ============ Decision bound ============
-if_bounded = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
+if_bound_RT = 0; % if_bounded = 1 means that the trial stops at the bound (reaction time version)
+                 % otherwise, use fixed_RT below
+
 read_out_at_the_RT = 1; % Readout decision at RT instead of at the end of each trial
 % f_bound = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
@@ -88,6 +94,9 @@ decis_bound = 32*[1 1 1] + 3.5*[0 0 1]; % bound height, for different conditions
 
 % Smoothed diff
 % decis_bound = 13*[1 1 1+2/13]; % bound height, for different conditions
+
+% ============ if if_bound_RT = 0, use the fixed_RTs ======
+fixed_RT = [0.75 0.9 0.85]; % Seconds after stim on
 
 att_gain_stim_after_hit_bound = [0 0 0];
 
@@ -143,7 +152,7 @@ gain_acc_vest = 2.6; %  gain_vel_vis * sum(vel)/sum(abs(acc)); % (m^2/s)^-1
 
 % =================== Network configuration ===================
 % -- Time constant for integration
-time_const_int = 10000e-3; % in s
+time_const_int = 100e-3; % in s  ("ShortTau" here)
 time_const_lip = 100e-3; % in s
 
 % ---- Visual to INTEGRATOR ----
@@ -782,9 +791,19 @@ parfor tt = 1:n_parfor_loops % For each trial
 %             + att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input
 %             + att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
 %         
+
+% Extremely small time constant
+%{
         rate_int_this(:,k+1) = ...   %  Self dynamics.  in Hz!
             + 100*att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input
             + 100*att_gain_stim * w_int_vest * spikes_vest_this(:,k);     % Vestibular input
+%}
+    
+        % Fix the extreme small time constant to real dynamics
+        rate_int_this(:,k+1) = (1 - dt / time_const_int) * rate_int_this(:,k) ...   %  Self dynamics.  in Hz!
+            + 1 / time_const_int * ( att_gain_stim * w_int_vis * spikes_vis_this(:,k)...     %  Visual input
+                                +    att_gain_stim * w_int_vest * spikes_vest_this(:,k));     % Vestibular input
+
         
         % -- Update LIP layer --
         rate_lip_this(:,k+1) = bias_lip + (1-dt/time_const_lip)*rate_lip_this(:,k)...   %  Self dynamics.  in Hz!
@@ -812,26 +831,29 @@ parfor tt = 1:n_parfor_loops % For each trial
         %                               +1/time_const_out*((w_oo-dc_w_oo)*spikes_out(:,k));
         
         % -- Termination --
-        % - Rate termination --
-                %{
-        if if_bounded && k*dt > stim_on_time + 0.5 && att_gain_stim == 1 ...
-                ... && (max(decision_ac(:,k+1)) > decis_bound_this)   % Only Max
-                && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
-                mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_bound_this(ss_this)
-            ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
-                ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_bound_this(ss_this)
-                %}
-            % - Time termination (Just for para_scanning other parameters!) -
-%             %{
-        if if_bounded && att_gain_stim == 1 && ...
-                 ((unique_stim_type(ss_this)==1 && k*dt > stim_on_time + 0.75)...
-                ||(unique_stim_type(ss_this)==2 && k*dt > stim_on_time + 1.00)...
-                ||(unique_stim_type(ss_this)==3 && k*dt > stim_on_time + 0.9))
-            %}
-            % Set the attention for motion stimuli to zero
-            att_gain_stim = att_gain_this(ss_this);
-            RT(tt) = (k-stim_on_time_in_bins)*dt;
-            % last_proba(:,count) = rate_int(:,k,tt,hh,ss);
+        if if_bound_RT        % - Rate termination --
+            if att_gain_stim == 1 && k*dt > stim_on_time + 0.5  ...
+                    ... && (max(decision_ac(:,k+1)) > decis_bound_this)   % Only Max
+                    && max(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))),...    % Smoothed Max
+                    mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_bound_this(ss_this)
+                ...&& abs(mean(mean(decision_ac(left_targ_ind-5:left_targ_ind+5,max(1,k-20):k+1))) - ...    % Smoothed diff
+                    ...mean(mean(decision_ac(right_targ_ind-5:right_targ_ind+5,max(1,k-20):k+1)))) > decis_bound_this(ss_this)
+                    %}
+                % Set the attention for motion stimuli to zero
+                att_gain_stim = att_gain_this(ss_this);
+                RT(tt) = (k-stim_on_time_in_bins)*dt;
+                % last_proba(:,count) = rate_int(:,k,tt,hh,ss);
+            end
+        else    % - Time termination (Just for para_scanning other parameters!) -
+            if att_gain_stim == 1 && ...
+                    ((unique_stim_type(ss_this)==1 && k*dt > stim_on_time + fixed_RT(1))...
+                    ||(unique_stim_type(ss_this)==2 && k*dt > stim_on_time + fixed_RT(2))...
+                    ||(unique_stim_type(ss_this)==3 && k*dt > stim_on_time + fixed_RT(3)))
+                % Set the attention for motion stimuli to zero
+                att_gain_stim = att_gain_this(ss_this);
+                RT(tt) = (k-stim_on_time_in_bins)*dt;
+                % last_proba(:,count) = rate_int(:,k,tt,hh,ss);
+            end
         end
         %                     end
         
@@ -902,11 +924,23 @@ AnalyzeResult;
 %% Save result
 if nargin == 2 % Save result
     for rr = 1:length(output_result)
-        eval(['result.(output_result{rr}) =' output_result{rr}]);
+        eval(['userResult.(output_result{rr}) =' output_result{rr}]);
     end
 else
-    result =[];
+    userResult = [];
 end
+
+save(sprintf('./result/%sresults.mat',save_folder),'userResult',...
+                'weights_saved','paras','diff_PSTH_correct_mean_headings');  % Mandatory
+
+if ~ION_cluster
+    tmp1 = whos;
+    for i = 1:length(tmp1)
+        assignin('base',tmp1(i).name,eval(tmp1(i).name));
+    end
+    % keyboard;
+end
+
 end
 
 function plot_weight(~,~,x,y,w)

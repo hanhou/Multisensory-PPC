@@ -74,6 +74,8 @@ if ION_cluster
     % For most part of the code, I just rename the old "_lip" stuff to "_int"
     N_int = 200;
     N_lip = 200;  % Output layers (Real LIP layer)
+    
+    % dt = 1e-3; % Size of time bin in seconds
     dt = 2e-3; % Size of time bin in seconds
 else
     N_vis = 100; % Visual motion signal
@@ -91,7 +93,8 @@ delay_for_all = 0.15; % in s
 delay_another_for_visual = 0.1; % in s
 
 % ============ Decision bound ============
-if_bound_RT = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version); otherwise, use fixed_RT below
+if_bound_RT = 1; % if_bounded = 1 means that the trial stops at the bound (reaction time version); 
+                 % otherwise, use fixed_RT below
 read_out_at_the_RT = 0; % Readout decision at RT instead of at the end of each trial
 % d = @(x) max(x);  % A bug: if lip_HH is a function, this anonymous function cannot be broadcasted into parfor loop
 %  f_bound = @(x) abs(x(right_targ_ind)-x(left_targ_ind));
@@ -159,7 +162,7 @@ var_vis = A_eta; % Although the Methods of Beck 2008 did not mention the "sqrtm"
 max_rate_target = 30; %% in Hz
 b_target = 0;
 K_target = 4;
-slope_norm_target=0.5;c
+slope_norm_target=0.5;
 dc_norm_target = 0.5;
 
 % Gains

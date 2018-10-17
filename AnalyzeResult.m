@@ -66,14 +66,15 @@ rate_int(rate_int<0) = 0;
 ts = ((0:trial_dur_total_in_bins-1)-stim_on_time_in_bins)*dt; % in s
 
 % I don't use these two any more. Just for backup. HH20180621
-%{
+% %{
 rate_int_Ann = rate_int;
 rate_lip_Ann = rate_lip;
 ts_Ann = ts;
+win_step = dt;
 %}
 
 %% == Actual shifting window spike count for LIP as in experimental data (~ rectified rate_lip etc.) ===
-% %{ 
+%{ 
 % I don't use this. See above.  % No, I decide to use this. HH20180621
 fprintf('Generating PSTH (same as experiments)...');
 
@@ -120,8 +121,8 @@ if if_debug
     plot(ts_Ann,mean(rate_lip_Ann(left_targ_ind,:,:,1,2),3),'b'); hold on;
     plot(ts_Ann,mean(rate_lip_Ann(right_targ_ind,:,:,1,2),3),'b--')
 
-    plot(ts_Ann,mean(rate_lip_Ann_smooth(left_targ_ind,:,:,1,2),3),'k');
-    plot(ts_Ann,mean(rate_lip_Ann_smooth(right_targ_ind,:,:,1,2),3),'k--')
+%     plot(ts_Ann,mean(rate_lip_Ann_smooth(left_targ_ind,:,:,1,2),3),'k');
+%     plot(ts_Ann,mean(rate_lip_Ann_smooth(right_targ_ind,:,:,1,2),3),'k--')
 
     % plot(ts,mean(rectified_rate_lip(left_targ_ind,:,:,end,1),3),'r--');
     % plot(ts,mean(rectified_rate_lip(right_targ_ind,:,:,end,1),3),'r');
@@ -258,6 +259,7 @@ else % Not debug, Fig.2a in Beck 2008
 
       
       if ION_cluster
+          fprintf('...Saving fig 0p1...');
           export_fig('-painters','-nocrop','-m1.5' ,sprintf('./result/%s0p1_Fig2a%s.png',save_folder,para_override_txt));
           saveas(gcf,sprintf('./result/%s0p1_Fig2a%s.fig',save_folder,para_override_txt),'fig');
       end
@@ -299,7 +301,12 @@ if read_out_at_the_RT == 1 % Freeze population activity at RT for each trial
     for aa = 1:N_rep
         for bb = 1:length(unique_heading)
             for cc = 1:length(unique_stim_type)
-                rate_lip_at_decision(:,aa,bb,cc) = rate_lip_Ann(:,round(RT(aa,bb,cc)/dt)+stim_on_time_in_bins,aa,bb,cc);
+                try
+                    bin_in_Ann = find(ts_Ann >= RT(aa,bb,cc) - dt, 1, 'first');
+                    rate_lip_at_decision(:,aa,bb,cc) = rate_lip_Ann(:,bin_in_Ann,aa,bb,cc);
+                catch
+                    keyboard
+                end
             end
         end
     end
@@ -548,6 +555,7 @@ if analysis_switch(2)
     end
     
     if ION_cluster
+        fprintf('...Saving fig 0p5...');
         file_name = sprintf('./result/%s0p5_DecodingMethods%s',save_folder,para_override_txt);
         export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
         saveas(gcf,[file_name '.fig'],'fig');
@@ -1580,12 +1588,12 @@ if analysis_switch(9)
                         fisher_HH_simpleGu(activities(:,to_calculate_PSTH_cells_ind),headings);
                     
             % ---- Add Partial FisherInfo. HH20180824
-            result = fisher_HH_partialFI(activities(:,to_calculate_PSTH_cells_ind),headings,reshape(choices(:,:,kk),[],1));
+            this_result = fisher_HH_partialFI(activities(:,to_calculate_PSTH_cells_ind),headings,reshape(choices(:,:,kk),[],1));
             
-            infos_dt_lip_partialSensoryFI(tt,kk) = result.infoPartialSensory;
-            infos_dt_lip_partialSensoryFI_SE(tt,kk) = result.bootSESensory;
-            infos_dt_lip_partialChoiceFI(tt,kk) = result.infoPartialChoice;
-            infos_dt_lip_partialChoiceFI_SE(tt,kk) = result.bootSEChoice;
+            infos_dt_lip_partialSensoryFI(tt,kk) = this_result.infoPartialSensory;
+            infos_dt_lip_partialSensoryFI_SE(tt,kk) = this_result.bootSESensory;
+            infos_dt_lip_partialChoiceFI(tt,kk) = this_result.infoPartialChoice;
+            infos_dt_lip_partialChoiceFI_SE(tt,kk) = this_result.bootSEChoice;
                         
             
             if kk ~= 2
@@ -1619,22 +1627,24 @@ if analysis_switch(9)
    
     linkaxes(findobj(gcf,'type','axes'),'xy');
     
-    h_4 = subplot(2,3,4);
-    SeriesComparison(shiftdim(infos_dt_lip_simpleGu,-1),info_ts,'OverrideError',infos_dt_lip_simpleGu_SE,'axes',h_4);
-    hold on; plot(info_ts,sum(infos_dt_lip_simpleGu(:,1:2),2),'m','linew',2);
-    xlim([0 1.5]); legend off; title('Standard FI (Gu 2010)')
-    
-    h_5 = subplot(2,3,5);
-    SeriesComparison(shiftdim(infos_dt_lip_partialSensoryFI,-1),info_ts,'OverrideError',infos_dt_lip_partialSensoryFI_SE,'axes',h_5);
-    hold on; plot(info_ts,sum(infos_dt_lip_partialSensoryFI(:,1:2),2),'m','linew',2);
-    xlim([0 1.5]); legend off; title('Partial Sensory FI (Gu)')
-    
-    linkaxes([h_4 h_5],'xy')
-    
-    h_6 = subplot(2,3,6);
-    SeriesComparison(shiftdim(infos_dt_lip_partialChoiceFI,-1),info_ts,'OverrideError',infos_dt_lip_partialChoiceFI_SE,'axes',h_6);
-    hold on; plot(info_ts,sum(infos_dt_lip_partialChoiceFI(:,1:2),2),'m','linew',2);
-    xlim([0 1.5]); legend off; title('Partial Choice FI (Gu)')
+    try
+        h_4 = subplot(2,3,4);
+        SeriesComparison(shiftdim(infos_dt_lip_simpleGu,-1),info_ts,'OverrideError',infos_dt_lip_simpleGu_SE,'axes',h_4);
+        hold on; plot(info_ts,sum(infos_dt_lip_simpleGu(:,1:2),2),'m','linew',2);
+        xlim([0 1.5]); legend off; title('Standard FI (Gu 2010)')
+        
+        h_5 = subplot(2,3,5);
+        SeriesComparison(shiftdim(infos_dt_lip_partialSensoryFI,-1),info_ts,'OverrideError',infos_dt_lip_partialSensoryFI_SE,'axes',h_5);
+        hold on; plot(info_ts,sum(infos_dt_lip_partialSensoryFI(:,1:2),2),'m','linew',2);
+        xlim([0 1.5]); legend off; title('Partial Sensory FI (Gu)')
+        
+        linkaxes([h_4 h_5],'xy')
+        
+        h_6 = subplot(2,3,6);
+        SeriesComparison(shiftdim(infos_dt_lip_partialChoiceFI,-1),info_ts,'OverrideError',infos_dt_lip_partialChoiceFI_SE,'axes',h_6);
+        hold on; plot(info_ts,sum(infos_dt_lip_partialChoiceFI(:,1:2),2),'m','linew',2);
+        xlim([0 1.5]); legend off; title('Partial Choice FI (Gu)')
+    end
     
     SetFigure(20)    
     

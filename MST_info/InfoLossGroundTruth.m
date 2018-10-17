@@ -9,20 +9,20 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%% Defult Parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 1. Tunings
-nu_neuron = 8000;
+nu_neuron = 10000;
 
 % mean_baselineDropRatioOfAi = 0.7;  % If not scan, this is real mean_beta. If scan, this will be the "baseline dropping ratio of Ai". 20180628
 
 ReLU = 0;  % Whether using ReLUs for each neuron to remove their minimal tuning curve. HH20180627
            % Add ReLU = 2: remove to B; ReLU = 1: remove to (1-beta)*B
-plotTuning = 1;
+plotTuning = 0;
 
 % Using gamma distribution to introduce heterogeneity
-coherence = 10; % Simulate coherence change by linearly scaling A and beta (manually!!!) HH20180811
+coherence = 100; % Simulate coherence change by linearly scaling A and beta (manually!!!) HH20180811
 
-A_mean = 47 * coherence / 100;   A_std = 30 * coherence / 100;
-halfwidth_mean = 110;  halfwidth_std = 40;
-beta_mean = 0.7 * coherence / 100;   beta_std = 0.3 * coherence / 100;
+A_mean = 50 * coherence / 100;   A_std = 30 * coherence / 100;
+halfwidth_mean = 125;  halfwidth_std = 50;
+beta_mean = 0.6 * coherence / 100;   beta_std = 0.4 * coherence / 100;
 B_mean = 20;    B_std = 20;
 
 localSharpen = 2; % According to Gu 2010 Supplementary Fig. 3
@@ -36,7 +36,7 @@ B_mean_default = B_mean;    B_std_default = B_std;
 
 % 2. Correlations
 rho = 0.1;  k = 2;  fano = 0.8;  % Decay correlation
-epsilon_0 = 0.00139; % f'f'T  Corresponds to threshold ~= 4 degree. Original 0.0027
+epsilon_0 = 0.0015; % f'f'T  Corresponds to threshold ~= 4 degree. Original 0.0027
 
 % 3. Miscs
 NumOfSigma = 3.5;
@@ -89,7 +89,7 @@ if keepStdMeanRatio
     A_std = A_std_default * A_mean / A_mean_default;
     halfwidth_std = halfwidth_std_default * halfwidth_mean / halfwidth_mean_default;
     beta_std = beta_std_default * beta_mean / beta_mean_default;
-    B_std = B_std_default * beta_mean / B_mean_default;
+    B_std = B_std_default * B_mean / B_mean_default;
 end
 
 % Finalize tuning parameters
@@ -221,6 +221,7 @@ for tt = 1:length(time)    % Across all trial
         I_epsi_ts(tt) = 0;
     else
         I_0_ts(tt) = f_der' * (SIGMA_0_ts \ f_der); % (A\b) is faster than inv(A)*b
+        
         % I_epsi_ts(tt) = f_der' * inv(SIGMA_epsi_ts) * f_der;   % Could be replaced by the fact that I_epsi = I_0 / (1 + eta * I_0)
         I_epsi_ts(tt) = I_0_ts(tt) / (1 + epsi_this * I_0_ts(tt));
     end
@@ -369,6 +370,12 @@ set(findall(gcf,'type','axes'),'Ylim',[0 ylnew]);
     hist(betai,30); title('beta');
     xlim([0 1])
     
+    if ION_cluster
+        file_name = sprintf('./3_average tuning');
+        % export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
+        saveas(gcf,[file_name '.fig'],'fig');
+    end
+
     figure(2045); clf
     plot(theta_pref(round(linspace(1,end,1000)))/pi*180,half_widths(round(linspace(1,end,1000))),'ok')
     set(gca,'xtick',-180:90:180,'ytick',45:45:270)
@@ -376,7 +383,7 @@ set(findall(gcf,'type','axes'),'Ylim',[0 ylnew]);
 
     
     if ION_cluster
-        file_name = sprintf('./3_average tuning');
+        file_name = sprintf('./3_Tuningwidth_PreferDirection');
         % export_fig('-painters','-nocrop','-m1.5',[file_name '.png']);
         saveas(gcf,[file_name '.fig'],'fig');
     end
