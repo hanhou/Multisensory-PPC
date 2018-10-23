@@ -4,12 +4,12 @@ function result = DoDropOut_seq(knockout_M,knockout_iter_N)
 % "Sequential" means that at each time I knock out the top M cells with the largest weights
 
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-sub_sample_using_ratio = 0; % If 0, using the same number of neurons
+sub_sample_using_ratio = 1; % If 0, using the same number of neurons
 sub_sample_ratio = 1;
 sub_sample_N = 100;
 % knockout_M = 1; % How many cells will be drop out for each iteration
 %knockout_iter_N = 20;
-permN = 100;
+permN = 1;
 alpha = 1; % Regularization term
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -190,7 +190,17 @@ for ii = 1 : size(data_to_fit,1)
     set(gcf,'uni','norm','pos',[0.073       0.077        0.88       0.829/5*n_Dropout]);
     
     for dd = 1:n_Dropout  % The (dd-1)th dropout
-        [sort_norm_weights,ind] = sort(norm_weights(dd,:),2,'descend');
+        
+        % Sort according to weights
+        % [sort_norm_weights,ind] = sort(norm_weights(dd,:),2,'descend');
+        
+        % Sort according to weights*dynamic range
+        dynamic_range = range(range(fit_basis_trace_per_cell{1},2),3);
+        contribution = dynamic_range'.* norm_weights(dd,:);
+        contribution = contribution/max(contribution);
+        [sort_norm_weights,ind] = sort(contribution,2,'descend');
+        
+        
         to_plot = ind(~isnan(sort_norm_weights));
         to_plot_w = sort_norm_weights(~isnan(sort_norm_weights));
         
@@ -201,7 +211,7 @@ for ii = 1 : size(data_to_fit,1)
             catch
                 keyboard
             end
-            title(sprintf('#%g, w = %g',to_plot(tt), to_plot_w(tt)));
+            title(sprintf('#%g, %g',to_plot(tt), to_plot_w(tt)));
             axis tight
             hold on; plot(xlim,[0 0],'k--'); plot([0 0], ylim,'k--')
         end

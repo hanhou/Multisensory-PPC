@@ -20,7 +20,7 @@ analysis_switch = [0;%1;  % 0p1 Fig2a of Beck 2008 and noise correlation calcula
                    1;%1;  % 3 Cells deltaPSTH
                    0;% 1;  % 3p5 Cells rawPSTH
                    0;%1;  % 4 Heterogeneity
-                   0;%1;  % 5 Linear regression (Gu 2008)
+                   1;%1;  % 5 Linear regression (Gu 2008)
                    0;%1;  % 6 Information in sensory areas
                    ];
 end
@@ -579,7 +579,7 @@ hs = tight_subplot(3,4,0.05);
 
 % --- Bootstrapping ---
 if ION_cluster
-    N_bootstrapping = 200;
+    N_bootstrapping = 1000;
     N_reps_boot = N_rep;
 else
     N_bootstrapping = 20;
@@ -609,7 +609,6 @@ for ss = 1:length(unique_stim_type)
     
     set(bar(ss,mean(thres_boot(ss,:))),'facecolor',colors(unique_stim_type(ss),:)); hold on;
     errorbar(ss,mean(thres_boot(ss,:)),std(thres_boot(ss,:)),'color',colors(unique_stim_type(ss),:));
-    
     
     axes(hpsy);
     plot(psychometric(:,1),psychometric(:,2),'o','color',colors(unique_stim_type(ss),:),'markerfacecolor',colors(unique_stim_type(ss),:),'markersize',10); % Psychometric
@@ -666,6 +665,26 @@ if length(unique_stim_type) == 3
     pred_thres = (psycho(1,2)^(-2)+psycho(2,2)^(-2))^(-1/2);
     set(text(min(xlim),0.6+0.06*(ss+1),sprintf('pred = %g\n',pred_thres)),'color','k');
 end
+
+
+% --- Calculate ps ---
+xs = thres_boot';
+ps_psycho = nan(size(xs,2));
+
+% NOTE: ttest or ttest2 cannot be used because they're not "sampling data"!!
+% Instead, use the definition of p-values (and different subsamplings can be pooled)
+for g1 = 1:size(xs,2)
+    for g2 = g1 + 1:size(xs,2)
+        p = 2 * sum(xs(:,g1) > xs(:,g2))/size(xs,1);
+        if p > 1, p = 2-p; end
+        ps_psycho(g1,g2) = p;
+        ps_psycho(g2,g1) = p;
+    end
+end
+
+display(ps_psycho);
+
+ps_psycho_ttest = nan(size(xs,2));
 
 
 %}
@@ -1308,6 +1327,8 @@ if analysis_switch(8)
     t_centers = ts_Ann(1) + t_span / 2 : t_step : ts_Ann(end)-t_span / 2;
     
     weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
+    
+    
     % measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
     
     for i = 1:length(to_plot_linear)  % For each cell
@@ -1338,12 +1359,12 @@ if analysis_switch(8)
 %             weight_vest_vis(i,:,tcc) = [b(2:3)' stat.p(2:3)' stat_reg([1 3])]; % Weights, r^2 and p-value
 
             r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
-            [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
-            [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
+            X = r(:,1:2); Y = r(:,3);
+            [b,~,stat] = glmfit(X, Y,'normal','link','identity','constant','off');
             
+            [~,~,~,~,stat_reg] = regress(Y,[ones(size(r,1),1) X]);
             weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
-
-            
+           
             % yfit = r(:,1:2) * b;
             % measure_pred_all((i-1)*10 + 1:(i-1)*10+size(r,1),:,tcc) = [r(:,3) yfit];
             
@@ -1354,6 +1375,7 @@ if analysis_switch(8)
         end
     end
     
+    %%
     figure(7252243);
     set(gcf,'uni','norm','pos',[0.005       0.057       0.958       0.822]);clf; hold on;
     subplot(2,5,[1]);
@@ -1363,7 +1385,7 @@ if analysis_switch(8)
     temp_col = {'b','r','k'};
     temp_marker = {'s','o','o'}; % {'','',''};
     for pp = 1 : 3
-        h = shadedErrorBar(repmat(t_centers',1,1),mean_paras(:,pp),sem_paras(:,pp),{[temp_marker{pp} temp_col{pp} '-'],'linew',2,'markersize',10});
+        h = shadedErrorBar(repmat(t_centers',1,1),mean_paras(:,pp),sem_paras(:,pp),'lineProp',{[temp_marker{pp} temp_col{pp} '-'],'linew',2,'markersize',10});
         hold on;
     end
     axis tight;
@@ -1377,7 +1399,7 @@ if analysis_switch(8)
     % Gaussian vel
     plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
     
-    %% ======  Part II: Large window, R^2 and weight. Figure 5 of Gu 2008  =====
+    % ======  Part II: Large window, R^2 and weight. Figure 5 of Gu 2008  =====
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     toi = [1 1.4] ;   % Time of interests for weights illustration
     t_span_large = 1;
@@ -1388,7 +1410,8 @@ if analysis_switch(8)
     % PSTH_correct_mean_headings = [cell_for_regression time stim_type abs_heading choice];
     
     weight_vest_vis = nan(length(to_plot_linear),2 * 2 + 2,length(t_centers)); % Weights (3), p_values (3), r^2, p-value of r^2
-    linear_regression_ws = nan(length(to_plot_linear),2,length(t_centers));
+   
+    weight_vest_vis_test = nan(length(to_plot_linear),2,length(t_centers));
     measure_pred_all = nan(length(to_plot_linear) * 2 * length(unique_abs_heading),2,length(t_centers));
 
 %     weight_vest_vis_lsqlin = nan(length(to_plot_linear),2,length(t_centers));
@@ -1419,12 +1442,21 @@ if analysis_switch(8)
 %             b = b(2:3);   stat.p = stat.p(2:3);            
             
             r = r - repmat(nanmean(r,1),size(r,1),1); % Mean removed for each
-            [b,~,stat] = glmfit(r(:,1:2) ,r(:,3),'normal','link','identity','constant','off');
+            X = r(:,1:2); Y = r(:,3);
+            [b,~,stat] = glmfit(X ,Y,'normal','link','identity','constant','off');
 
-            linear_regression_ws(i,:,tcc) = r(:,1:2)\r(:,3);  % The same result for sure.
+            % Other linear fittings
+%             b_test = pinv(X)*Y;
+%             weight_vest_vis_test(i,:,tcc) = b_test';  % Pseudoinverse
+            
+            lamda = 10;
+            b_test = inv(X'*X + lamda * eye(size(X,2)))*X'*Y; % Ridge regularization
+            weight_vest_vis_test(i,:,tcc) = b_test';  % The same result for sure.
     
             [~,~,~,~,stat_reg] = regress(r(:,3),[ones(size(r,1),1) r(:,1:2)]);
             weight_vest_vis(i,:,tcc) = [b' stat.p' stat_reg([1 3])]; % Weights, r^2 and p-value
+            
+             
             
 %             b_lsqlin = lsqlin([r(:,1:2)],r(:,3),[],[],[],[],[0 0]');
 %             lin = lsqlin([ones(size(r(:,1))) r(:,1:2)],r(:,3),[],[],[],[],[0 0 0]'); b_lsqlin = b_lsqlin(2:3);
@@ -1449,7 +1481,7 @@ if analysis_switch(8)
         nsig_ind = weight_vest_vis(:,end,toi_ind)>=0.05;
         
         % Predicted v.s. measured
-        ax0 = subplot(2,4,2 + (toii-1)*4);
+        ax0 = subplot(2,5,2 + (toii-1)*5);
         h = LinearCorrelation( measure_pred_all(:,1,toi_ind), measure_pred_all(:,2,toi_ind),...
             'CombinedIndex',[],...
             'Xlabel','Measured response','Ylabel','Predicted response',...
@@ -1461,14 +1493,14 @@ if analysis_switch(8)
         legend off;
         
         % Distribution of R^2
-        ax1 = subplot(2,4,3 + (toii-1)*4);
+        ax1 = subplot(2,5,3 + (toii-1)*5);
         h = HistComparison({weight_vest_vis(sig_ind,end-1,toi_ind),weight_vest_vis(nsig_ind,end-1,toi_ind)},...
             'EdgeColors',{'k','k'},'FaceColors',{[.3 .3 .3 ],[0.9 0.9 0.9]},'XCenters',0.05:0.1:1,'MeanType','Median','Axes',ax1);
         xlabel('R^2'); ylabel('Number of neurons'); xlim([0 1]); ylim([0 23]);
         title(sprintf('t_{center} = %g (%g s window)',t_centers(toi_ind),t_span_large));
         
         % Vestibular / visual weights
-        ax2(toii) = subplot(2,4,4 + (toii-1)*4);
+        ax2(toii) = subplot(2,5,4 + (toii-1)*5); 
         %    plot(weight_vest_vis(:,1,toi_ind),weight_vest_vis(:,2,toi_ind),'o');
         
         %     h = LinearCorrelation({
@@ -1509,13 +1541,38 @@ if analysis_switch(8)
         if toii == 1 ; xlabel(''); end
         plot(xlim,[0 0],'k--'); plot([0 0],ylim,'k--'); plot(xlim,[1 1],'k--'); plot([1 1],ylim,'k--');
         legend off;
-        set(gca,'xtick',-10:1:10,'ytick',-10:1:10);
+        set(gca,'xtick',-10:1:10,'ytick',-10:1:10); axis square
         
 %         ax3(toii) = subplot(2,5,5 + (toii-1)*5);
 %         plot(ax3(toii),weight_vest_vis_lsqlin(:,1,toi_ind),weight_vest_vis_lsqlin(:,2,toi_ind),'o'); hold on
 %         plot(xlim,[0 0],'k--'); plot([0 0],ylim,'k--'); plot(xlim,[1 1],'k--'); plot([1 1],ylim,'k--');
 %         set(gca,'xtick',-10:1:10,'ytick',-10:1:10);
         
+        % ------  Test plot ----------
+
+        ax3(toii) = subplot(2,5,5 + (toii-1)*5);
+        
+        % Fit color to to N_sample_cell/4
+        cols = colormap(jet);
+        cols = interp1(1:length(cols),cols,1:length(cols)/(N_sample_cell/4+4):length(cols));
+        for cc = 1:N_sample_cell
+            dis_prop = min(abs(cc-N_sample_cell/4),abs(cc-N_sample_cell/4*3));
+            this_col = cols(1+round(dis_prop),:);
+            plot(weight_vest_vis_test(cc,1,toi_ind),weight_vest_vis_test(cc,2,toi_ind),'o','markersize',7,'color',this_col,'linewid',2); hold on;
+        end
+        xlims = xlim; ylims = ylim;
+        xlims_new = [min(xlims(1),ylims(1)) max(xlims(2),ylims(2))];
+        xlims_new = [xlims_new(1)-range(xlims_new)/20 xlims_new(2)+range(xlims_new)/20];
+        
+        axis([xlims_new xlims_new]);
+        h.diag = plot([xlims_new(1) xlims_new(2)],[xlims_new(1) xlims_new(2)],'k:');
+
+        plot(xlim,[0 0],'k--'); plot([0 0],ylim,'k--'); plot(xlim,[1 1],'k--'); plot([1 1],ylim,'k--');
+        legend off;
+        set(gca,'xtick',-10:1:10,'ytick',-10:1:10); axis square
+        title(sprintf('Ridge lamda = %g', lamda))
+
+
     end
     
     if ION_cluster

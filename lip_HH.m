@@ -65,18 +65,18 @@ N_targets = 2; % Target input
 
 % ============ Times ============
 if ION_cluster
-    N_vis = 100; % Visual motion signal
-    N_vest = 100; % Vestibular motion signal
+    N_vis = 200; % Visual motion signal
+    N_vest = 200; % Vestibular motion signal
     
     % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
     % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
     % which has a short time constant, keeps receiving target input but does not integrate it.
     % For most part of the code, I just rename the old "_lip" stuff to "_int"
-    N_int = 200;
-    N_lip = 200;  % Output layers (Real LIP layer)
+    N_int = 300;
+    N_lip = 300;  % Output layers (Real LIP layer)
     
     % dt = 1e-3; % Size of time bin in seconds
-    dt = 2e-3; % Size of time bin in seconds
+    dt = 5e-3; % Size of time bin in seconds
 else
     N_vis = 100; % Visual motion signal
     N_vest = 100; % Vestibular motion signal
@@ -118,7 +118,7 @@ if ION_cluster
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
     conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
-    N_rep = 100; % For each condition
+    N_rep = 200; % For each condition
 else
     unique_heading = [-8 -4 -2 -1 0 1 2 4 8];
 %     unique_heading = [-8 0 8];
@@ -1003,7 +1003,7 @@ else
 end
 
 save(sprintf('./result/%sresults.mat',save_folder),'userResult',...
-                'weights_saved','paras','diff_PSTH_correct_mean_headings');  % Mandatory
+                'weights_saved','paras','diff_PSTH_correct_mean_headings','ps_psycho');  % Mandatory
 
 if ~ION_cluster
     tmp1 = whos;

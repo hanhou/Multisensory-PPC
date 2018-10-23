@@ -19,7 +19,7 @@ end
 
 
 if ION_cluster
-    nu_runs = 7;
+    nu_runs = 10;
 else
     nu_runs = 5;
 end

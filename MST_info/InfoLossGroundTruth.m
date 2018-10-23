@@ -21,7 +21,7 @@ plotTuning = 0;
 coherence = 100; % Simulate coherence change by linearly scaling A and beta (manually!!!) HH20180811
 
 A_mean = 50 * coherence / 100;   A_std = 30 * coherence / 100;
-halfwidth_mean = 125;  halfwidth_std = 50;
+fwhm_mean = 125;  fwhm_std = 50; % Full width at half maximum
 beta_mean = 0.6 * coherence / 100;   beta_std = 0.4 * coherence / 100;
 B_mean = 20;    B_std = 20;
 
@@ -29,13 +29,13 @@ localSharpen = 2; % According to Gu 2010 Supplementary Fig. 3
 
 % For keepStdMeanRatio
 A_mean_default = A_mean;   A_std_default = A_std;
-halfwidth_mean_default = halfwidth_mean;  halfwidth_std_default = halfwidth_std;
+fwhm_mean_default = fwhm_mean;  fwhm_std_default = fwhm_std;
 beta_mean_default = beta_mean;   beta_std_default = beta_std;
 B_mean_default = B_mean;    B_std_default = B_std;
 
 
 % 2. Correlations
-rho = 0.1;  k = 2;  fano = 0.8;  % Decay correlation
+rho = 0.1;  k = 2;  fano = 1;  % Decay correlation
 epsilon_0 = 0.0015; % f'f'T  Corresponds to threshold ~= 4 degree. Original 0.0027
 
 % 3. Miscs
@@ -87,7 +87,7 @@ end
 
 if keepStdMeanRatio
     A_std = A_std_default * A_mean / A_mean_default;
-    halfwidth_std = halfwidth_std_default * halfwidth_mean / halfwidth_mean_default;
+    fwhm_std = fwhm_std_default * fwhm_mean / fwhm_mean_default;
     beta_std = beta_std_default * beta_mean / beta_mean_default;
     B_std = B_std_default * B_mean / B_mean_default;
 end
@@ -95,7 +95,7 @@ end
 % Finalize tuning parameters
 gamma_para = [ % Mean   Std  (Desired)
     A_mean,  A_std;  % amp
-    halfwidth_mean,   halfwidth_std;  % Controls sigma of spatial tuning: k = log(0.5)/(cos(degtorad(desired_half_width))-1)
+    fwhm_mean,   fwhm_std;  % Controls sigma of spatial tuning: k = log(0.5)/(cos(degtorad(desired_half_width))-1)
     beta_mean,   beta_std; % beta
     B_mean,   B_std;  % original 20, 5
     ];
