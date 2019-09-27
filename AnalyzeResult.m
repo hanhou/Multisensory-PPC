@@ -15,13 +15,13 @@ else
 analysis_switch = [0;%1;  % 0p1 Fig2a of Beck 2008 and noise correlation calculation
                    0;  % 0p5 Decoding method 
                        % 1 Overview (mandatary)
-                   1;  % 1p5 Overview (normalized)
-                   1;  % 2 Example
-                   1;%1;  % 3 Cells deltaPSTH
+                   0;  % 1p5 Overview (normalized)
+                   0;  % 2 Example
+                   0;%1;  % 3 Cells deltaPSTH
                    0;% 1;  % 3p5 Cells rawPSTH
                    0;%1;  % 4 Heterogeneity
-                   1;%1;  % 5 Linear regression (Gu 2008)
-                   0;%1;  % 6 Information in sensory areas
+                   0;%1;  % 5 Linear regression (Gu 2008)
+                   1;%1;  % 6 Information in sensory areas
                    ];
 end
 
@@ -1689,11 +1689,13 @@ if analysis_switch(9)
         SeriesComparison(shiftdim(infos_dt_lip_simpleGu,-1),info_ts,'OverrideError',infos_dt_lip_simpleGu_SE,'axes',h_4);
         hold on; plot(info_ts,sum(infos_dt_lip_simpleGu(:,1:2),2),'m','linew',2);
         xlim([0 1.5]); legend off; title('Standard FI (Gu 2010)')
+        plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
         
         h_5 = subplot(2,3,5);
         SeriesComparison(shiftdim(infos_dt_lip_partialSensoryFI,-1),info_ts,'OverrideError',infos_dt_lip_partialSensoryFI_SE,'axes',h_5);
         hold on; plot(info_ts,sum(infos_dt_lip_partialSensoryFI(:,1:2),2),'m','linew',2);
         xlim([0 1.5]); legend off; title('Partial Sensory FI (Gu)')
+        plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
         
         linkaxes([h_4 h_5],'xy')
         
@@ -1701,6 +1703,8 @@ if analysis_switch(9)
         SeriesComparison(shiftdim(infos_dt_lip_partialChoiceFI,-1),info_ts,'OverrideError',infos_dt_lip_partialChoiceFI_SE,'axes',h_6);
         hold on; plot(info_ts,sum(infos_dt_lip_partialChoiceFI(:,1:2),2),'m','linew',2);
         xlim([0 1.5]); legend off; title('Partial Choice FI (Gu)')
+        plot(t_motion,vel/max(vel)*max(ylim)/5,'k--');
+        
     end
     
     SetFigure(20)    

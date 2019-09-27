@@ -262,7 +262,7 @@ SetFigure(15)
 
 % ==== 2) All cells ====
 
-% group_FI(:,:,[2 3]) = group_FI(:,:,[2 3]) / 10;
+group_FI(:,:,[2 3]) = group_FI(:,:,[2 3]) / 10; % Because the data are from 100% (Gu 2006)
 
 figure(1809171806); clf; set(gcf,'uni','norm','pos',[0.023        0.09       0.837        0.74]);
 % Scaling of PSTH_ts

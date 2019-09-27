@@ -84,6 +84,22 @@ else
     N_int = 100;
     N_lip = 100;  % Output layers (Real LIP layer)
     dt = 2e-3;
+
+%{
+    N_vis = 200; % Visual motion signal
+    N_vest = 200; % Vestibular motion signal
+    
+    % Today we decide to add a perfect integrator layer here. HH20170317 in UNIGE
+    % This layer has a very long time constant and feeds it's input to LIP, whereas LIP,
+    % which has a short time constant, keeps receiving target input but does not integrate it.
+    % For most part of the code, I just rename the old "_lip" stuff to "_int"
+    N_int = 300;
+    N_lip = 300;  % Output layers (Real LIP layer)
+    
+    % dt = 1e-3; % Size of time bin in seconds
+    dt = 5e-3; % Size of time bin in seconds
+
+%}
 end
 trial_dur_total = 1.7; % in s
 stim_on_time = 0.2; % in s
@@ -124,7 +140,9 @@ else
 %     unique_heading = [-8 0 8];
     conflict_heading = 0; % Vis - Vest
     unique_stim_type = [1 2 3];
-    N_rep = 20;
+    N_rep = 50;
+%     N_rep = 100; % For each condition
+
 end
 
 % =================== Stimuli ===================
@@ -224,7 +242,7 @@ threshold_lip = 0.0;
 save_folder = '';
 
 % ==== Heterogeneity ====
-heter_enable = 0; % Master switch of heterogeneity
+heter_enable = 1; % Master switch of heterogeneity
 
 % --- "POST": Add heterogeneity in post synaptic parameters ---
 % Variability in:    g       k     dc                   
@@ -239,11 +257,12 @@ heter_post (:) = 0;
 heter_normal = heter_enable * 0 * [1 1 1 1];  % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "Dropout": Increase sparseness in the weight matrix ---
-heter_dropout = heter_enable * 0.6 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
+heter_dropout = heter_enable * 00 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
 
 % --- "LogNormal": log normal distribution for each group of weights (diagonal) ---
 heter_lognormal  = heter_enable * 1 * [1 1 1 1]; % vest -> int, vis -> int, int -> lip, lip -> lip
-vis_vest_weight_noise_cor = heter_enable * -0.8;  % Controls the correlation between noise of weight in vest -> int and vis -> int
+
+vis_vest_weight_noise_cor = heter_enable * -0.8 * 0;  % Controls the correlation between noise of weight in vest -> int and vis -> int
 
 %%%%%%%%%%%%%%%% Override by input argument %%%%%%%%%%%%%%%
 para_override_txt = '';                 
@@ -607,6 +626,7 @@ else
         
         vest_correlated = (1-vis_vest_weight_noise_cor) * vest_noise + vis_vest_weight_noise_cor * vis_noise;
         vis_correlated =  vis_vest_weight_noise_cor * vest_noise + (1-vis_vest_weight_noise_cor) * vis_noise;
+        
         hold on; plot(vest_correlated,vis_correlated,'r.');
         [r,p] = corr(vest_correlated(:),vis_correlated(:));
         title(sprintf('r = %g, p = %g',r,p));
@@ -650,23 +670,24 @@ else
 end
 
 if if_debug
-    figure(90); clf;
-    set(gcf,'uni','norm','pos',[0.006       0.099       0.779       0.766],'name','Weights & Raster plot');
+    figure(9111); clf;
+    set(gcf,'uni','norm','pos',[0.0053571     0.25429      0.9869     0.27048],'name','Weights & Raster plot');
     
-    % subplot(4,3,1);
-    axes('position',[0.08 0.725 0.23 0.241]);
+    subplot(1,4,4);
+%     axes('position',[0.08 0.725 0.23 0.241]);
     h1 = imagesc(prefs_lip,prefs_lip,w_lip_lip'); colorbar; axis  xy; title('LIP->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{lip}');
     set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
     set(h1,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_lip,w_lip_lip'});
+    axis square
     
-    % subplot(4,3,4);
-    axes('position',[0.08 0.384 0.23 0.241]);
+    subplot(1,4,3);
+%     axes('position',[0.08 0.384 0.23 0.241]);
     h2 = imagesc(prefs_int,prefs_lip,w_lip_int'); colorbar; axis xy; title('Int->LIP');
     xlabel('\theta_{lip}'); ylabel('\theta_{int}');
     set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
     set(h2,'ButtonDownFcn',{@plot_weight,prefs_lip,prefs_int,w_lip_int'});
-    
+    axis square
     %     subplot(4,3,7);
     %     % surf(prefs_int,prefs_int,w_int_int');
     %     imagesc(prefs_int,prefs_int,w_int_int');    colorbar; axis xy; title('Int->Int');
@@ -680,19 +701,29 @@ if if_debug
     %     xlabel('\theta_{int}'); ylabel('\theta_{vest}'); ylim([-20 20]);
     %     set(gca,'xtick',-180:90:180);
     
-    % subplot(4,3,10);
-    axes('position',[0.08 0.055 0.23 0.241]);
-    h3 = imagesc(prefs_vis,prefs_int,w_int_vis'); colorbar; axis xy; title('Vis/Vest->Int');
-    xlabel('\theta_{int}'); ylim([-30 30]);
-    set(gca,'xtick',-180:90:180);
+    subplot(1,4,2);
+%     axes('position',[0.08 0.055 0.23 0.241]);
+    h3 = imagesc(prefs_vis,prefs_int,w_int_vis'); colorbar; axis xy; title('Vis->Int');
+    xlabel('\theta_{int}'); ylim([-180 180]);
+    set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
     set(h3,'ButtonDownFcn',{@plot_weight,prefs_int,prefs_vis,w_int_vis'});
-    ylabel('\theta_{vis/vest}');
+    ylabel('\theta_{vis}');
+    axis square
 %     temp_ax = axes('Pos',[0.05 0.124 0.053 0.134]);
 %     plot(prefs_vis,gain_func_along_vis(prefs_vis)); hold on;
 %     plot([-30 -30],ylim,'r-'); plot([30 30],ylim,'r-');
 %     view(270,90);     set(gca,'xtick',-180:90:180);
 %     xlabel('\theta_{vis/vest}');
-    
+
+    subplot(1,4,1);
+%     axes('position',[0.08 0.055 0.23 0.241]);
+    h4 = imagesc(prefs_vest,prefs_int,w_int_vest'); colorbar; axis xy; title('Vest->Int');
+    xlabel('\theta_{int}'); ylim([-180 180]);
+    set(gca,'xtick',-180:90:180,'ytick',-180:90:180);
+    set(h4,'ButtonDownFcn',{@plot_weight,prefs_int,prefs_vest,w_int_vest'});
+    ylabel('\theta_{vest}');
+    axis square
+  
     colormap hot;
     % keyboard;
 end
